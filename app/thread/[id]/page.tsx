@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { db } from "../../../db/index";
-import { threads, comments, users } from "../../../db/schema";
-import { eq, desc } from "drizzle-orm";
+import { threads, comments, users, criticalVotes } from "../../../db/schema";
+import { eq, desc, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 
@@ -71,6 +71,36 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
     revalidatePath(`/thread/${threadId}`);
   }
 
+  // 🌟 1. クリティカルボタンの送信処理（Server Action）
+  async function toggleCritical(formData: FormData) {
+    "use server";
+    const { userId } = await auth();
+    if (!userId) return;
+
+    const commentId = formData.get("commentId") as string;
+
+    // 既に投票済みかチェック（連打防止）
+    const existing = await db
+      .select()
+      .from(criticalVotes)
+      .where(
+        and(
+          eq(criticalVotes.commentId, commentId),
+          eq(criticalVotes.userId, userId)
+        )
+      );
+    if (existing.length === 0) {
+      // 投票を記録
+      await db.insert(criticalVotes).values({
+        id: crypto.randomUUID(),
+        userId: userId,
+        commentId: commentId,
+        createdAt: new Date(),
+      });
+      revalidatePath(`/thread/${threadId}`);
+    }
+  }
+
   return (
     <main className="max-w-3xl mx-auto p-8 mt-10">
       <Link href="/" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
@@ -81,7 +111,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
       <div className="bg-white p-8 rounded-lg shadow-md border mb-8">
         <h1 className="text-3xl font-bold mb-4 text-gray-800">{thread.title}</h1>
         <div className="flex items-center gap-3 mb-6 border-b pb-4 flex-wrap">
-          
+
           {/* 🌟 アイコンと名前をリンク化 */}
           <Link href={`/user/${thread.authorId}`} className="flex items-center gap-2 hover:opacity-80 transition">
             {thread.authorAvatar ? (
@@ -91,7 +121,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
             )}
             <span className="text-gray-800 font-bold hover:underline">{thread.authorName}</span>
           </Link>
-          
+
           <div className="flex gap-1 ml-2">
             {threadSkills.map((skill: string, index: number) => (
               <span key={index} className="bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold px-2 py-0.5 rounded-full">
@@ -113,7 +143,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
           return (
             <div key={comment.id} className="bg-gray-50 p-4 rounded-lg border">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                
+
                 {/* 🌟 コメント者のアイコンと名前をリンク化 */}
                 <Link href={`/user/${comment.authorId}`} className="flex items-center gap-2 hover:opacity-80 transition">
                   {comment.authorAvatar ? (
@@ -123,7 +153,19 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
                   )}
                   <span className="text-sm font-bold text-gray-800 hover:underline">{comment.authorName}</span>
                 </Link>
-                
+                {userId && (
+                  <form action={toggleCritical}>
+                    <input type="hidden" name="commentId" value={comment.id} />
+                    <button
+                      type="submit"
+                      className="text-lg hover:scale-125 transition-transform"
+                      title="クリティカル！"
+                    >
+                      💡
+                    </button>
+                  </form>
+                )}
+
                 <div className="flex gap-1 ml-1">
                   {commentSkills.map((skill: string, index: number) => (
                     <span key={index} className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold px-2 py-0.5 rounded-full">

@@ -91,3 +91,11 @@ export const directMessages = sqliteTable('direct_messages', {
   imageUrl: text('image_url'), // 🌟 画像も送れるように準備
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
+
+// 🌟 9. 新規追加：クリティカル評価（裏側でのみ集計）
+export const criticalVotes = sqliteTable('critical_votes', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  commentId: text('comment_id').notNull().references(() => comments.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});

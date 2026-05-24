@@ -4,6 +4,8 @@ import { projects, projectMembers, users, projectMessages } from "../../../db/sc
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import { put } from "@vercel/blob"; // 🌟 追加：Vercel Blob
+import ProjectChatForm from "./ProjectChatForm"; // 🌟 追加：先ほど作った高機能フォーム
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
@@ -14,7 +16,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const projectData = await db
     .select({
       id: projects.id,
-      ownerId: projects.ownerId, // 🌟 これを追加
+      ownerId: projects.ownerId,
       title: projects.title,
       description: projects.description,
       progressStatus: projects.progressStatus,
@@ -37,7 +39,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const project = projectData[0];
   if (!project) return <div className="p-24 text-center">プロジェクトが見つかりません。</div>;
 
-  // 2. メンバー一覧（userIdはすでに取得済み）
+  // 2. メンバー一覧
   const membersData = await db
     .select({
       id: projectMembers.id,
@@ -55,12 +57,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const isMember = membersData.some((member) => member.userId === userId);
   const rolesArray = Array.isArray(project.recruitingRoles) ? project.recruitingRoles : [];
 
-  // 3. チャット履歴
+  // 3. チャット履歴（🌟 画像URLを取得できるように追加）
   const chatMessages = await db
     .select({
       id: projectMessages.id,
-      authorId: projectMessages.authorId, // 🌟 これを追加
+      authorId: projectMessages.authorId,
       content: projectMessages.content,
+      imageUrl: projectMessages.imageUrl, // 🌟 これを追加！
       createdAt: projectMessages.createdAt,
       authorName: users.name,
       authorAvatar: users.avatarUrl,
@@ -70,6 +73,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     .where(eq(projectMessages.projectId, projectId))
     .orderBy(desc(projectMessages.createdAt));
 
+  // プロジェクト参加処理
   async function joinProject(formData: FormData) {
     "use server";
     const { userId } = await auth();
@@ -86,17 +90,34 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     revalidatePath(`/project/${projectId}`);
   }
 
+  // 🌟 画像対応版のチャット送信処理
   async function sendMessage(formData: FormData) {
     "use server";
     const { userId } = await auth();
     if (!userId) return;
+    
     const content = formData.get("content") as string;
-    if (!content.trim()) return;
+    const imageFile = formData.get("image") as File;
+
+    // 🌟 テキストも画像もない場合は何もしない
+    if (!content.trim() && (!imageFile || imageFile.size === 0)) return;
+
+    let imageUrl = null;
+
+    // 🌟 画像が選択されていればVercel Blobにアップロード
+    if (imageFile && imageFile.size > 0) {
+      const blob = await put(imageFile.name, imageFile, {
+        access: "public",
+      });
+      imageUrl = blob.url;
+    }
+
     await db.insert(projectMessages).values({
       id: crypto.randomUUID(),
       projectId: projectId,
       authorId: userId,
       content: content,
+      imageUrl: imageUrl, // 🌟 画像URLを保存
       createdAt: new Date(),
     });
     revalidatePath(`/project/${projectId}`);
@@ -116,11 +137,20 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <span className="bg-green-100 text-green-800 text-sm font-bold px-3 py-1 rounded-full">{project.progressStatus}</span>
               <span className="text-sm text-gray-400">設立: {new Date(project.createdAt).toLocaleDateString()}</span>
             </div>
+            {userId === project.ownerId && (
+              <div className="mb-4 flex justify-end">
+                <Link 
+                  href={`/project/${project.id}/edit`} 
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg text-sm border shadow-sm transition flex items-center gap-2"
+                >
+                  ✏️ プロジェクトを編集
+                </Link>
+              </div>
+            )}
             
             <h1 className="text-3xl font-bold mb-6 text-gray-800">{project.title}</h1>
             
             <div className="mb-8 pb-6 border-b flex items-center">
-              {/* 🌟 発起人をリンク化 */}
               <Link href={`/user/${project.ownerId}`} className="flex items-center gap-3 hover:opacity-80 transition">
                 {project.ownerAvatar ? <img src={project.ownerAvatar} alt="avatar" className="w-10 h-10 rounded-full border shadow-sm" /> : <div className="w-10 h-10 bg-gray-200 rounded-full border shadow-sm" />}
                 <div>
@@ -144,19 +174,20 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
           <div className="bg-white p-6 rounded-lg shadow-sm border">
             <h2 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">💬 プロジェクト・チャット</h2>
+            
+            {/* 🌟 メンバーの場合は高機能フォームを表示 */}
             {isMember ? (
-              <form action={sendMessage} className="mb-6 flex gap-3">
-                <input type="text" name="content" required placeholder="メンバーにメッセージを送信..." className="flex-1 border border-gray-300 p-3 text-sm rounded focus:ring-2 focus:ring-blue-500 outline-none" />
-                <button type="submit" className="bg-black hover:bg-gray-800 text-white font-bold py-2 px-6 rounded transition">送信</button>
-              </form>
+              <div className="mb-6">
+                <ProjectChatForm sendMessage={sendMessage} />
+              </div>
             ) : (
               <div className="mb-6 bg-gray-50 p-4 rounded text-center text-sm text-gray-500 border">チャットに参加するにはメンバーになる必要があります。</div>
             )}
+            
             <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
               {chatMessages.length === 0 ? <p className="text-gray-400 text-center py-4 text-sm">まだメッセージはありません。</p> : (
                 chatMessages.map((msg) => (
                   <div key={msg.id} className="flex gap-3 items-start bg-gray-50 p-3 rounded-lg border border-gray-100">
-                    {/* 🌟 チャット発言者をリンク化 */}
                     <Link href={`/user/${msg.authorId}`} className="hover:opacity-80 transition mt-1 flex-shrink-0">
                       {msg.authorAvatar ? <img src={msg.authorAvatar} alt="avatar" className="w-8 h-8 rounded-full border" /> : <div className="w-8 h-8 bg-gray-200 rounded-full border" />}
                     </Link>
@@ -165,7 +196,20 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                         <Link href={`/user/${msg.authorId}`} className="font-bold text-sm text-gray-800 hover:underline">{msg.authorName}</Link>
                         <span className="text-[10px] text-gray-400">{new Date(msg.createdAt).toLocaleString()}</span>
                       </div>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{msg.content}</p>
+                      
+                      {/* 🌟 画像があれば表示 */}
+                      {msg.imageUrl && (
+                        <img 
+                          src={msg.imageUrl} 
+                          alt="添付画像" 
+                          className="max-w-full h-auto rounded-lg border shadow-sm mb-2 max-h-64 object-cover" 
+                        />
+                      )}
+                      
+                      {/* 🌟 テキストがあれば表示 */}
+                      {msg.content && msg.content.trim() !== "" && (
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{msg.content}</p>
+                      )}
                     </div>
                   </div>
                 ))
@@ -175,6 +219,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
         </div>
 
+        {/* 右側のサイドバー部分は変更なし */}
         <div className="space-y-6">
           {isMember ? (
             <div className="bg-green-50 border border-green-200 p-6 rounded-lg text-center shadow-sm">
@@ -199,7 +244,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <div className="space-y-3">
               {membersData.map((member) => (
                 <div key={member.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded border">
-                  {/* 🌟 メンバー一覧のアイコンもリンク化 */}
                   <Link href={`/user/${member.userId}`} className="hover:opacity-80 transition flex-shrink-0">
                     {member.userAvatar ? <img src={member.userAvatar} alt="avatar" className="w-8 h-8 rounded-full border" /> : <div className="w-8 h-8 bg-gray-200 rounded-full border" />}
                   </Link>

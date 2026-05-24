@@ -1,17 +1,15 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "../db/index";
-import { users, threads, projects } from "../db/schema"; // 🌟 projects を追加
-import { desc, eq } from "drizzle-orm";
+import { users, threads, projects, comments, criticalVotes } from "../db/schema";
+import { desc, eq, gte } from "drizzle-orm";
 import Link from "next/link";
 
-// 🌟 tabパラメーターも受け取れるように追加
 export default async function Home({ searchParams }: { searchParams: Promise<{ category?: string, tab?: string }> }) {
   const { userId } = await auth();
   const user = await currentUser();
 
   const resolvedSearchParams = await searchParams;
   const currentCategory = resolvedSearchParams.category;
-  // 現在のタブ（指定がなければデフォルトで "threads" にする）
   const currentTab = resolvedSearchParams.tab || "threads";
 
   // 1. ユーザー情報の保存・更新
@@ -36,7 +34,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
   let projectList: any[] = [];
 
   if (currentTab === "threads") {
-    threadList = await db
+    // ① スレッドの基本情報を取得
+    const fetchedThreads = await db
       .select({
         id: threads.id,
         title: threads.title,
@@ -49,10 +48,59 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       })
       .from(threads)
       .leftJoin(users, eq(threads.authorId, users.id))
-      .where(currentCategory ? eq(threads.categoryId, currentCategory) : undefined)
-      .orderBy(desc(threads.createdAt));
+      .where(currentCategory ? eq(threads.categoryId, currentCategory) : undefined);
+
+    // 🌟 ② 過去3日間のデータを取得（トレンド計算用）
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    
+    const recentComments = await db
+      .select()
+      .from(comments)
+      .where(gte(comments.createdAt, threeDaysAgo));
+
+    const recentVotes = await db
+      .select()
+      .from(criticalVotes)
+      .where(gte(criticalVotes.createdAt, threeDaysAgo));
+
+    // 🌟 ③ 重みの設定（いつでもここでバランス調整できます）
+    const WEIGHTS = {
+      COMMENT: 1,      // 1コメント = 1点
+      USER: 5,         // 1人参加 = 5点
+      CRITICAL: 30,    // 1クリティカル = 30点（特大ボーナス）
+    };
+
+    // 🌟 ④ 各スレッドのトレンドスコアを計算
+    threadList = fetchedThreads.map((thread) => {
+      // このスレッドへの直近のコメントを抽出
+      const threadComments = recentComments.filter((c) => c.threadId === thread.id);
+      
+      const commentCount = threadComments.length;
+      const uniqueUsers = new Set(threadComments.map((c) => c.authorId)).size;
+      
+      const commentIds = threadComments.map((c) => c.id);
+      const criticalCount = recentVotes.filter((v) => commentIds.includes(v.commentId)).length;
+
+      // アルゴリズムでスコア算出
+      const trendScore = (commentCount * WEIGHTS.COMMENT) + (uniqueUsers * WEIGHTS.USER) + (criticalCount * WEIGHTS.CRITICAL);
+
+      return {
+        ...thread,
+        trendScore, // 計算結果を一時的に持たせる（画面には出さない）
+      };
+    });
+
+    // 🌟 ⑤ トレンドスコアが高い順（同点なら新しい順）に並び替え
+    threadList.sort((a, b) => {
+      if (b.trendScore !== a.trendScore) {
+        return b.trendScore - a.trendScore;
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
   } else if (currentTab === "projects") {
-    projectList = await db
+    // ① プロジェクト一覧を取得
+    const fetchedProjects = await db
       .select({
         id: projects.id,
         title: projects.title,
@@ -65,8 +113,27 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
         ownerAvatar: users.avatarUrl,
       })
       .from(projects)
-      .leftJoin(users, eq(projects.ownerId, users.id))
-      .orderBy(desc(projects.createdAt));
+      .leftJoin(users, eq(projects.ownerId, users.id));
+
+    // 🌟 ② プロジェクトは「募集ステータス優先 ＋ 新着順」で並び替え
+    const getStatusScore = (status: string) => {
+      if (status === "メンバー募集中") return 100; // 最優先で一番上に！
+      if (status === "企画中") return 80;
+      if (status === "開発中") return 60;
+      if (status === "テスト中") return 40;
+      if (status === "リリース済み") return 20;
+      return 0; // 停止中など
+    };
+
+    projectList = fetchedProjects.sort((a, b) => {
+      const scoreA = getStatusScore(a.progressStatus);
+      const scoreB = getStatusScore(b.progressStatus);
+      
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA; // ステータスの点数が高い順
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   }
 
   const getCategoryLabel = (id: string | null) => {

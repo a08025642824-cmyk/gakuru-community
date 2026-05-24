@@ -27,10 +27,13 @@ export default async function DMInboxPage() {
   // 2. 相手（パートナー）ごとに「最新のメッセージ」を1つだけ抜き出す処理
   const conversationsMap = new Map();
   for (const msg of allMyMessages) {
-    // 自分が送信者なら相手はreceiver、自分が受信者なら相手はsender
     const partnerId = msg.senderId === myId ? msg.receiverId : msg.senderId;
     
-    // まだMapに登録されていなければ（一番新しいメッセージなら）保存
+    // 🌟 お化けデータ（undefined等）は完全に無視してスキップ（これでエラーを防ぎます！）
+    if (!partnerId || partnerId === "undefined") {
+      continue;
+    }
+
     if (!conversationsMap.has(partnerId)) {
       conversationsMap.set(partnerId, msg);
     }
@@ -45,7 +48,7 @@ export default async function DMInboxPage() {
     const partnersData = await db
       .select()
       .from(users)
-      .where(inArray(users.id, partnerIds)); // inArrayを使って複数人を一気に検索！
+      .where(inArray(users.id, partnerIds));
 
     // ユーザー情報と最新メッセージを結合し、最新のメッセージが新しい順に並び替える
     inbox = partnersData.map(partner => ({
@@ -55,8 +58,8 @@ export default async function DMInboxPage() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto p-8 mt-4">
-      <h1 className="text-2xl font-bold mb-8 text-gray-800 border-b pb-4">
+    <main className="max-w-3xl mx-auto p-4 md:p-8 mt-4">
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-4">
         ✉️ メッセージ
       </h1>
 
@@ -68,8 +71,8 @@ export default async function DMInboxPage() {
             <p className="text-sm text-gray-500 mb-6">
               気になるプロジェクトやスレッドを見つけて、<br />メンバーにダイレクトメッセージを送ってみましょう！
             </p>
-            <Link href="/?tab=projects" className="bg-black text-white px-6 py-3 rounded-full font-bold text-sm hover:bg-gray-800 transition">
-              プロジェクトを探す
+            <Link href="/" className="bg-black text-white px-6 py-3 rounded-full font-bold text-sm hover:bg-gray-800 transition">
+              ホームに戻る
             </Link>
           </div>
         ) : (
@@ -99,9 +102,10 @@ export default async function DMInboxPage() {
                       </span>
                     </div>
                     <div className="text-sm text-gray-500 truncate flex items-center gap-1">
-                      {/* 自分が送った最後のメッセージなら「自分: 」と付ける */}
-                      {isMeSender && <span className="text-xs bg-gray-200 text-gray-600 px-1 rounded">自分</span>}
-                      <span className="truncate">{latestMessage.content}</span>
+                      {isMeSender && <span className="text-xs bg-gray-200 text-gray-600 px-1 rounded flex-shrink-0">自分</span>}
+                      <span className="truncate">
+                        {latestMessage.imageUrl ? "📷 [画像が添付されています]" : latestMessage.content}
+                      </span>
                     </div>
                   </div>
                 </Link>
