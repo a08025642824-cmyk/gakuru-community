@@ -1,0 +1,237 @@
+import { auth } from "@clerk/nextjs/server";
+import { db } from "../../../db/index";
+import { projects, projectMembers, users, projectMessages } from "../../../db/schema";
+import { eq, desc } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
+import Link from "next/link";
+
+export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await auth();
+  const resolvedParams = await params;
+  const projectId = resolvedParams.id;
+
+  // 1. プロジェクト本体
+  const projectData = await db
+    .select({
+      id: projects.id,
+      ownerId: projects.ownerId, // 🌟 これを追加
+      title: projects.title,
+      description: projects.description,
+      progressStatus: projects.progressStatus,
+      onboardingMemo: projects.onboardingMemo,
+      recruitingRoles: projects.recruitingRoles,
+      isOpenToAll: projects.isOpenToAll,
+      githubUrl: projects.githubUrl,
+      figmaUrl: projects.figmaUrl,
+      discordUrl: projects.discordUrl,
+      documentUrl: projects.documentUrl,
+      createdAt: projects.createdAt,
+      ownerName: users.name,
+      ownerAvatar: users.avatarUrl,
+    })
+    .from(projects)
+    .leftJoin(users, eq(projects.ownerId, users.id))
+    .where(eq(projects.id, projectId))
+    .limit(1);
+
+  const project = projectData[0];
+  if (!project) return <div className="p-24 text-center">プロジェクトが見つかりません。</div>;
+
+  // 2. メンバー一覧（userIdはすでに取得済み）
+  const membersData = await db
+    .select({
+      id: projectMembers.id,
+      roleText: projectMembers.roleText,
+      userId: users.id,
+      userName: users.name,
+      userAvatar: users.avatarUrl,
+      userSkills: users.skills,
+    })
+    .from(projectMembers)
+    .leftJoin(users, eq(projectMembers.userId, users.id))
+    .where(eq(projectMembers.projectId, projectId))
+    .orderBy(desc(projectMembers.createdAt));
+
+  const isMember = membersData.some((member) => member.userId === userId);
+  const rolesArray = Array.isArray(project.recruitingRoles) ? project.recruitingRoles : [];
+
+  // 3. チャット履歴
+  const chatMessages = await db
+    .select({
+      id: projectMessages.id,
+      authorId: projectMessages.authorId, // 🌟 これを追加
+      content: projectMessages.content,
+      createdAt: projectMessages.createdAt,
+      authorName: users.name,
+      authorAvatar: users.avatarUrl,
+    })
+    .from(projectMessages)
+    .leftJoin(users, eq(projectMessages.authorId, users.id))
+    .where(eq(projectMessages.projectId, projectId))
+    .orderBy(desc(projectMessages.createdAt));
+
+  async function joinProject(formData: FormData) {
+    "use server";
+    const { userId } = await auth();
+    if (!userId) return;
+    const roleText = formData.get("roleText") as string || "メンバー";
+    await db.insert(projectMembers).values({
+      id: crypto.randomUUID(),
+      projectId: projectId,
+      userId: userId,
+      roleText: roleText,
+      status: "approved",
+      createdAt: new Date(),
+    });
+    revalidatePath(`/project/${projectId}`);
+  }
+
+  async function sendMessage(formData: FormData) {
+    "use server";
+    const { userId } = await auth();
+    if (!userId) return;
+    const content = formData.get("content") as string;
+    if (!content.trim()) return;
+    await db.insert(projectMessages).values({
+      id: crypto.randomUUID(),
+      projectId: projectId,
+      authorId: userId,
+      content: content,
+      createdAt: new Date(),
+    });
+    revalidatePath(`/project/${projectId}`);
+  }
+
+  return (
+    <main className="max-w-4xl mx-auto p-8 mt-4">
+      <Link href="/?tab=projects" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
+        ← プロジェクト一覧に戻る
+      </Link>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="md:col-span-2 space-y-8">
+          
+          <div className="bg-white p-8 rounded-lg shadow-sm border">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="bg-green-100 text-green-800 text-sm font-bold px-3 py-1 rounded-full">{project.progressStatus}</span>
+              <span className="text-sm text-gray-400">設立: {new Date(project.createdAt).toLocaleDateString()}</span>
+            </div>
+            
+            <h1 className="text-3xl font-bold mb-6 text-gray-800">{project.title}</h1>
+            
+            <div className="mb-8 pb-6 border-b flex items-center">
+              {/* 🌟 発起人をリンク化 */}
+              <Link href={`/user/${project.ownerId}`} className="flex items-center gap-3 hover:opacity-80 transition">
+                {project.ownerAvatar ? <img src={project.ownerAvatar} alt="avatar" className="w-10 h-10 rounded-full border shadow-sm" /> : <div className="w-10 h-10 bg-gray-200 rounded-full border shadow-sm" />}
+                <div>
+                  <div className="text-xs text-gray-500">発起人・オーナー</div>
+                  <div className="font-bold text-gray-800 hover:underline">{project.ownerName}</div>
+                </div>
+              </Link>
+            </div>
+
+            <h2 className="text-xl font-bold mb-3 text-gray-800">プロジェクトの概要</h2>
+            <p className="text-gray-700 whitespace-pre-wrap leading-relaxed mb-8">{project.description}</p>
+
+            <h2 className="text-xl font-bold mb-3 text-gray-800">募集ポジション</h2>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {rolesArray.map((role: string, index: number) => (
+                <span key={index} className="bg-gray-100 border border-gray-300 text-gray-700 text-sm font-bold px-4 py-2 rounded-full">{role}</span>
+              ))}
+              {project.isOpenToAll && <span className="bg-yellow-100 border border-yellow-200 text-yellow-800 text-sm font-bold px-4 py-2 rounded-full">🙌 専門外でも大歓迎！</span>}
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow-sm border">
+            <h2 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">💬 プロジェクト・チャット</h2>
+            {isMember ? (
+              <form action={sendMessage} className="mb-6 flex gap-3">
+                <input type="text" name="content" required placeholder="メンバーにメッセージを送信..." className="flex-1 border border-gray-300 p-3 text-sm rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+                <button type="submit" className="bg-black hover:bg-gray-800 text-white font-bold py-2 px-6 rounded transition">送信</button>
+              </form>
+            ) : (
+              <div className="mb-6 bg-gray-50 p-4 rounded text-center text-sm text-gray-500 border">チャットに参加するにはメンバーになる必要があります。</div>
+            )}
+            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+              {chatMessages.length === 0 ? <p className="text-gray-400 text-center py-4 text-sm">まだメッセージはありません。</p> : (
+                chatMessages.map((msg) => (
+                  <div key={msg.id} className="flex gap-3 items-start bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    {/* 🌟 チャット発言者をリンク化 */}
+                    <Link href={`/user/${msg.authorId}`} className="hover:opacity-80 transition mt-1 flex-shrink-0">
+                      {msg.authorAvatar ? <img src={msg.authorAvatar} alt="avatar" className="w-8 h-8 rounded-full border" /> : <div className="w-8 h-8 bg-gray-200 rounded-full border" />}
+                    </Link>
+                    <div className="flex-1">
+                      <div className="flex items-baseline justify-between mb-1">
+                        <Link href={`/user/${msg.authorId}`} className="font-bold text-sm text-gray-800 hover:underline">{msg.authorName}</Link>
+                        <span className="text-[10px] text-gray-400">{new Date(msg.createdAt).toLocaleString()}</span>
+                      </div>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        <div className="space-y-6">
+          {isMember ? (
+            <div className="bg-green-50 border border-green-200 p-6 rounded-lg text-center shadow-sm">
+              <div className="text-3xl mb-2">🎉</div><h3 className="font-bold text-green-800">あなたはメンバーです！</h3>
+            </div>
+          ) : (
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-blue-200">
+              <h3 className="font-bold text-gray-800 mb-4">このプロジェクトに参加する</h3>
+              {userId ? (
+                <form action={joinProject} className="space-y-3">
+                  <input type="text" name="roleText" placeholder="希望の担当（例: バックエンド, 応援係）" className="w-full border border-gray-300 p-2 text-sm rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded transition">🚀 参加する！</button>
+                </form>
+              ) : (
+                <p className="text-sm text-gray-500 text-center bg-gray-50 p-3 rounded border">参加するにはログインが必要です。</p>
+              )}
+            </div>
+          )}
+
+          <div className="bg-white p-6 rounded-lg shadow-sm border">
+            <h2 className="font-bold mb-4 text-gray-800 border-b pb-2">メンバー ({membersData.length}名)</h2>
+            <div className="space-y-3">
+              {membersData.map((member) => (
+                <div key={member.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded border">
+                  {/* 🌟 メンバー一覧のアイコンもリンク化 */}
+                  <Link href={`/user/${member.userId}`} className="hover:opacity-80 transition flex-shrink-0">
+                    {member.userAvatar ? <img src={member.userAvatar} alt="avatar" className="w-8 h-8 rounded-full border" /> : <div className="w-8 h-8 bg-gray-200 rounded-full border" />}
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    <Link href={`/user/${member.userId}`} className="font-bold text-xs text-gray-800 truncate block hover:underline">{member.userName}</Link>
+                    <div className="text-[10px] text-blue-600 truncate">{member.roleText}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* メンバー専用ダッシュボード */}
+          {isMember && (
+            <div className="bg-gray-900 p-6 rounded-lg shadow-md text-white">
+              <h3 className="font-bold text-sm mb-4 flex items-center gap-2">🔒 開発ダッシュボード</h3>
+              {project.onboardingMemo && (
+                <div className="bg-gray-800 p-3 rounded mb-4 border border-gray-700">
+                  <div className="text-[10px] text-gray-400 mb-1">📝 合流メモ</div>
+                  <p className="text-xs text-gray-200 whitespace-pre-wrap">{project.onboardingMemo}</p>
+                </div>
+              )}
+              <div className="space-y-2">
+                {project.githubUrl && <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className="block w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 p-2 rounded flex items-center justify-between"><span className="font-bold text-xs">🐙 GitHub</span><span className="text-[10px] text-gray-400">↗</span></a>}
+                {project.discordUrl && <a href={project.discordUrl} target="_blank" rel="noopener noreferrer" className="block w-full bg-indigo-900 hover:bg-indigo-800 border border-indigo-700 p-2 rounded flex items-center justify-between"><span className="font-bold text-xs">💬 Discord</span><span className="text-[10px] text-gray-400">↗</span></a>}
+                {project.figmaUrl && <a href={project.figmaUrl} target="_blank" rel="noopener noreferrer" className="block w-full bg-pink-900 hover:bg-pink-800 border border-pink-700 p-2 rounded flex items-center justify-between"><span className="font-bold text-xs">🎨 Figma</span><span className="text-[10px] text-gray-400">↗</span></a>}
+                {project.documentUrl && <a href={project.documentUrl} target="_blank" rel="noopener noreferrer" className="block w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 p-2 rounded flex items-center justify-between"><span className="font-bold text-xs">📄 ドキュメント</span><span className="text-[10px] text-gray-400">↗</span></a>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}
