@@ -35,7 +35,11 @@ export default async function NotificationsPage() {
       .where(eq(notifications.id, notificationId));
     
     revalidatePath("/notifications");
-    redirect(`/thread/${threadId}`);
+    if (threadId) {
+      redirect(`/thread/${threadId}`);
+    } else {
+      redirect(`/notifications`);
+    }
   }
 
   return (
@@ -46,23 +50,28 @@ export default async function NotificationsPage() {
         {notificationList.length === 0 ? (
           <p className="text-gray-500 text-center py-10">まだ通知はありません。</p>
         ) : (
-          notificationList.map((n) => (
-            <form action={() => markAsRead(n.id, n.threadId)} key={n.id}>
-              <button 
-                type="submit" 
-                className={`w-full text-left p-4 rounded-lg border transition ${
-                  n.isRead ? "bg-white text-gray-500" : "bg-blue-50 border-blue-200"
-                }`}
-              >
-                <div className="font-bold text-sm mb-1">
-                  {n.senderName} さんがあなたのコメントに反応しました！
-                </div>
-                <div className="text-xs text-gray-600 truncate">
-                  スレッド: {n.threadTitle}
-                </div>
-              </button>
-            </form>
-          ))
+          notificationList.map((n) => {
+            // 🌟 bindを使って、あらかじめ引数をセットした関数を作る！
+            const markAsReadWithArgs = markAsRead.bind(null, n.id, n.threadId);
+            
+            return (
+              <form action={markAsReadWithArgs} key={n.id}>
+                <button 
+                  type="submit" 
+                  className={`w-full text-left p-4 rounded-lg border transition ${
+                    n.isRead ? "bg-white text-gray-500" : "bg-blue-50 border-blue-200"
+                  }`}
+                >
+                  <div className="font-bold text-sm mb-1">
+                    {n.senderName} さんがあなたのコメントに反応しました！
+                  </div>
+                  <div className="text-xs text-gray-600 truncate">
+                    スレッド: {n.threadTitle}
+                  </div>
+                </button>
+              </form>
+            );
+          })
         )}
       </div>
     </main>
