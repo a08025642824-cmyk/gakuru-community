@@ -99,3 +99,14 @@ export const criticalVotes = sqliteTable('critical_votes', {
   commentId: text('comment_id').notNull().references(() => comments.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
+
+export const notifications = sqliteTable('notifications', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),       // 🌟 通知を受け取る人（コメントを書いた人）
+  senderId: text('sender_id').notNull().references(() => users.id),   // 🌟 アクションを起こした人（💡を押した人）
+  type: text('type').notNull(),                                       // 'critical' や 'reply' など
+  threadId: text('thread_id').references(() => threads.id),           // 飛び先のリンク用
+  commentId: text('comment_id').references(() => comments.id),
+  isRead: integer('is_read', { mode: 'boolean' }).default(false),     // 既読フラグ
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});

@@ -1,9 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
 import { db } from "../../../db/index";
 import { threads, comments, users, criticalVotes } from "../../../db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import CriticalButton from "./CriticalButton";
 
 export default async function ThreadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
@@ -14,7 +15,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
   const threadData = await db
     .select({
       id: threads.id,
-      authorId: threads.authorId, // 🌟 これを追加！
+      authorId: threads.authorId, 
       title: threads.title,
       content: threads.content,
       createdAt: threads.createdAt,
@@ -39,7 +40,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
   const commentList = await db
     .select({
       id: comments.id,
-      authorId: comments.authorId, // 🌟 これを追加！
+      authorId: comments.authorId,
       content: comments.content,
       createdAt: comments.createdAt,
       authorName: users.name,
@@ -71,35 +72,8 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
     revalidatePath(`/thread/${threadId}`);
   }
 
-  // 🌟 1. クリティカルボタンの送信処理（Server Action）
-  async function toggleCritical(formData: FormData) {
-    "use server";
-    const { userId } = await auth();
-    if (!userId) return;
-
-    const commentId = formData.get("commentId") as string;
-
-    // 既に投票済みかチェック（連打防止）
-    const existing = await db
-      .select()
-      .from(criticalVotes)
-      .where(
-        and(
-          eq(criticalVotes.commentId, commentId),
-          eq(criticalVotes.userId, userId)
-        )
-      );
-    if (existing.length === 0) {
-      // 投票を記録
-      await db.insert(criticalVotes).values({
-        id: crypto.randomUUID(),
-        userId: userId,
-        commentId: commentId,
-        createdAt: new Date(),
-      });
-      revalidatePath(`/thread/${threadId}`);
-    }
-  }
+  // 自分がすでにクリティカルを押したコメントの一覧を取得
+  const myVotes = userId ? await db.select().from(criticalVotes).where(eq(criticalVotes.userId, userId)) : [];
 
   return (
     <main className="max-w-3xl mx-auto p-8 mt-10">
@@ -112,7 +86,6 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
         <h1 className="text-3xl font-bold mb-4 text-gray-800">{thread.title}</h1>
         <div className="flex items-center gap-3 mb-6 border-b pb-4 flex-wrap">
 
-          {/* 🌟 アイコンと名前をリンク化 */}
           <Link href={`/user/${thread.authorId}`} className="flex items-center gap-2 hover:opacity-80 transition">
             {thread.authorAvatar ? (
               <img src={thread.authorAvatar} alt="avatar" className="w-10 h-10 rounded-full shadow-sm border" />
@@ -144,7 +117,6 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
             <div key={comment.id} className="bg-gray-50 p-4 rounded-lg border">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
 
-                {/* 🌟 コメント者のアイコンと名前をリンク化 */}
                 <Link href={`/user/${comment.authorId}`} className="flex items-center gap-2 hover:opacity-80 transition">
                   {comment.authorAvatar ? (
                     <img src={comment.authorAvatar} alt="avatar" className="w-6 h-6 rounded-full border shadow-sm" />
@@ -153,17 +125,14 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
                   )}
                   <span className="text-sm font-bold text-gray-800 hover:underline">{comment.authorName}</span>
                 </Link>
+                
+                {/* 🌟 修正：フォームで囲まず、直接ボタンコンポーネントを置く */}
                 {userId && (
-                  <form action={toggleCritical}>
-                    <input type="hidden" name="commentId" value={comment.id} />
-                    <button
-                      type="submit"
-                      className="text-lg hover:scale-125 transition-transform"
-                      title="クリティカル！"
-                    >
-                      💡
-                    </button>
-                  </form>
+                  <CriticalButton
+                    commentId={comment.id}
+                    hasVoted={myVotes.some(v => v.commentId === comment.id)}
+                    threadId={threadId} 
+                  />
                 )}
 
                 <div className="flex gap-1 ml-1">

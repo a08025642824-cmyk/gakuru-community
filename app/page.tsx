@@ -194,22 +194,45 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
               threadList.map((thread) => {
                 const skillsArray = Array.isArray(thread.authorSkills) ? thread.authorSkills : [];
                 return (
-                  <Link href={`/thread/${thread.id}`} key={thread.id} className="block bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition relative">
-                    <div className="absolute top-6 right-6 bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1 rounded-full">
-                      {getCategoryLabel(thread.categoryId)}
-                    </div>
-                    <div className="flex items-center gap-3 mb-3">
-                      {thread.authorAvatar ? <img src={thread.authorAvatar} alt="avatar" className="w-8 h-8 rounded-full" /> : <div className="w-8 h-8 bg-gray-200 rounded-full" />}
-                      <span className="text-sm font-medium text-gray-800">{thread.authorName}</span>
-                      <div className="flex gap-1 flex-wrap">
-                        {skillsArray.map((skill: string, index: number) => (
-                          <span key={index} className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold px-2 py-0.5 rounded-full">{skill}</span>
-                        ))}
+                  // 🌟 変更1：親要素の relative を削除
+                  <Link href={`/thread/${thread.id}`} key={thread.id} className="block bg-white p-5 sm:p-6 rounded-lg shadow-sm border hover:shadow-md transition">
+                    
+                    {/* 🌟 変更2：Flexboxでスマホ時は縦並び(flex-col)、PC時は横並び(sm:flex-row)に自動調整 */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-4">
+                      
+                      {/* 左（スマホ時は上）側：アイコン・名前・スキル */}
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-1">
+                        {thread.authorAvatar ? (
+                          <img src={thread.authorAvatar} alt="avatar" className="w-8 h-8 rounded-full shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 bg-gray-200 rounded-full shrink-0" />
+                        )}
+                        <span className="text-sm font-medium text-gray-800">{thread.authorName}</span>
+                        
+                        <div className="flex gap-1 flex-wrap">
+                          {skillsArray.map((skill: string, index: number) => (
+                            // 🌟 改行防止(whitespace-nowrap)を追加
+                            <span key={index} className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-400 ml-auto">{new Date(thread.createdAt).toLocaleDateString()}</span>
+
+                      {/* 右（スマホ時は下）側：カテゴリーと日付 */}
+                      {/* スマホではカテゴリーを左、日付を右に散らす（justify-between） */}
+                      <div className="flex items-center justify-between w-full sm:w-auto sm:flex-col sm:items-end gap-2 shrink-0">
+                        <span className="bg-gray-100 text-gray-600 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap">
+                          {getCategoryLabel(thread.categoryId)}
+                        </span>
+                        <span className="text-xs text-gray-400">{new Date(thread.createdAt).toLocaleDateString()}</span>
+                      </div>
+
                     </div>
-                    <h3 className="text-xl font-bold text-gray-800 mb-2 pr-24">{thread.title}</h3>
-                    <p className="text-gray-600 line-clamp-3">{thread.content}</p>
+
+                    {/* 🌟 変更3：タイトルの pr-24（右側の余白）を削除（絶対配置をやめたため不要） */}
+                    <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-2">{thread.title}</h3>
+                    <p className="text-gray-600 line-clamp-3 text-sm sm:text-base">{thread.content}</p>
                   </Link>
                 );
               })
