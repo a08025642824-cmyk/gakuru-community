@@ -156,6 +156,25 @@ export default async function CreateProjectPage() {
             </div>
           </div>
 
+          {/* ▼ 追加：セクション4：立ち上げ前の確認事項（免責とテンプレート） */}
+          <div className="space-y-4 bg-blue-50/50 p-6 rounded-lg border border-blue-100">
+            <h2 className="text-lg font-bold text-blue-900 border-b border-blue-200 pb-2 flex items-center gap-2">
+              <span>🛡️</span> トラブルを防ぐための推奨事項
+            </h2>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              素晴らしいアイデアも、権利やルールの認識ズレで頓挫してしまうことがあります。
+              メンバーが集まったら、最初のキックオフで以下の3点を明確にし、テキスト（NotionやDiscordなど）に残しておくことを強くお勧めします。
+            </p>
+            <ul className="list-decimal list-inside text-sm text-gray-700 space-y-2 font-medium bg-white p-4 rounded border border-blue-100">
+              <li>このプロジェクトは「学習・趣味」か、「将来的な収益化」を目指すものか？</li>
+              <li>作成したコードやデザインの「著作権（IP）」は発起人のものか、共有か？</li>
+              <li>収益が出た場合の配分や、途中で離脱するメンバーの権利はどう扱うか？</li>
+            </ul>
+            <p className="text-xs text-gray-500 mt-2">
+              ※Gakuru Communityは、メンバー間の金銭的・法的な契約トラブルには介入できません。オープンでリスペクトのあるコミュニケーションを心がけましょう。
+            </p>
+          </div>
+
           <button type="submit" className="w-full bg-black hover:bg-gray-800 text-white font-bold py-4 px-8 rounded-lg text-lg transition shadow-md">
             🚀 この内容でプロジェクトを立ち上げる
           </button>

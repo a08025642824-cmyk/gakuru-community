@@ -11,7 +11,7 @@ export default function PrivacyPage() {
 
       <div className="space-y-8 text-gray-700 leading-relaxed text-sm sm:text-base">
         <p>
-          【 運営者名またはチーム名 】（以下「運営者」といいます。）は、本Webサービス「【 Gakuru AI コミュニティ 】」（以下「本サービス」といいます。）におけるユーザーの個人情報の取扱いについて、以下のとおりプライバシーポリシー（以下「本ポリシー」といいます。）を定めます。
+          【 gakuru community 】（以下「運営者」といいます。）は、本Webサービス「【 Gakuru AI コミュニティ 】」（以下「本サービス」といいます。）におけるユーザーの個人情報の取扱いについて、以下のとおりプライバシーポリシー（以下「本ポリシー」といいます。）を定めます。
         </p>
 
         <section>
@@ -81,7 +81,7 @@ export default function PrivacyPage() {
         </section>
 
         <div className="mt-12 pt-8 border-t text-right text-gray-500 font-bold">
-          施行日：2026年【 X月X日 】
+          施行日：2026年【 5月25日 】
         </div>
       </div>
     </main>
