@@ -110,3 +110,14 @@ export const notifications = sqliteTable('notifications', {
   isRead: integer('is_read', { mode: 'boolean' }).default(false),     // 既読フラグ
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
+
+// schema.ts の該当箇所
+
+export const privateMemos = sqliteTable('private_memos', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  rawText: text('raw_text').notNull(),
+  summary: text('summary').notNull(),
+  label: text('label').notNull().default('その他'), // 🌟 追加：AIが自動分類するラベル（初期値は'その他'）
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});

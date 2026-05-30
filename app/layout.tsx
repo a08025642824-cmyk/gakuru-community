@@ -4,9 +4,10 @@ import "./globals.css";
 import { ClerkProvider, UserButton, SignInButton, SignUpButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
-import AuthButtonsWithAgreement from "./components/AuthButtonsWithAgreement"; // 🌟 追加：作成したコンポーネントをインポート
+import AuthButtonsWithAgreement from "./components/AuthButtonsWithAgreement"; 
+import MemoHeaderButton from "./components/MemoHeaderButton"; // 🌟 追加：メモボタンをインポート
 
-// 🌟 DBとスキーマをインポート（パスは適宜合わせてください）
+// 🌟 DBとスキーマをインポート
 import { db } from "../db/index";
 import { notifications } from "../db/schema";
 import { and, eq } from "drizzle-orm";
@@ -37,16 +38,14 @@ export default async function RootLayout({
   return (
     <ClerkProvider>
       <html lang="ja">
-        {/* 🌟 変更点1：フッターを一番下に押しやるために flex flex-col を追加 */}
         <body className={`${inter.className} bg-gray-50 text-gray-900 min-h-screen flex flex-col`}>
 
           <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
             <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
 
-              {/* 左側：ロゴ */}
+              {/* 左側：ロゴとナビゲーション */}
               <div className="flex items-center gap-4 sm:gap-8">
                 <Link href="/" className="font-black text-lg sm:text-xl tracking-tighter text-black flex items-center gap-2 hover:opacity-80 transition">
-                  {/* next/image コンポーネントではなく、標準の img タグで十分です */}
                   <img src="/icon.png" alt="Gakuru Community" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
                   <span className="hidden sm:inline">Gakuru</span>
                 </Link>
@@ -65,6 +64,9 @@ export default async function RootLayout({
               <div className="flex items-center gap-3 sm:gap-5">
                 {userId ? (
                   <>
+                    {/* 🌟 1. AIメモ（セカンドブレイン）ボタンを追加 */}
+                    <MemoHeaderButton />
+
                     <Link href="/notifications" className="relative text-xl sm:text-sm font-bold text-gray-600 hover:text-black transition" title="通知">
                       🔔
                       {unreadCount > 0 && (
@@ -77,10 +79,12 @@ export default async function RootLayout({
                     <Link href="/dm" className="text-xl sm:text-sm font-bold text-gray-600 hover:text-black transition" title="DM">
                       ✉️<span className="hidden sm:inline"> DM</span>
                     </Link>
+                    
                     <Link href="/mypage" className="text-xl sm:text-sm font-bold text-gray-600 hover:text-black transition" title="マイページ">
                       👤<span className="hidden sm:inline"> マイページ</span>
                     </Link>
 
+                    {/* スレッド・プロジェクト作成ボタン */}
                     <div className="flex items-center gap-1 sm:gap-2 border-l pl-2 sm:pl-4 ml-1 sm:ml-2">
                       <Link href="/create" className="bg-gray-100 text-gray-800 text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1.5 sm:py-2 rounded hover:bg-gray-200 transition">
                         <span className="sm:hidden">＋💬</span>
@@ -103,12 +107,12 @@ export default async function RootLayout({
             </div>
           </header>
 
-          {/* 🌟 メインコンテンツ（flex-grow をつけることで余白を埋めます） */}
+          {/* メインコンテンツ */}
           <div className="flex-grow">
             {children}
           </div>
 
-          {/* 🌟 変更点2：全ページ共通のフッターを追加 */}
+          {/* フッター */}
           <footer className="bg-white border-t py-8 mt-12">
             <div className="max-w-5xl mx-auto px-4 flex flex-col items-center gap-4">
               <div className="flex gap-6 text-sm font-bold text-gray-500">
