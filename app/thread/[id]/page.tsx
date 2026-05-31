@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import CriticalButton from "./CriticalButton";
+import DeleteCommentButton from "./DeleteCommentButton"; 
 
 export default async function ThreadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
@@ -117,6 +118,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
             <div key={comment.id} className="bg-gray-50 p-4 rounded-lg border">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
 
+                {/* 🌟 復元：アバターと名前 */}
                 <Link href={`/user/${comment.authorId}`} className="flex items-center gap-2 hover:opacity-80 transition">
                   {comment.authorAvatar ? (
                     <img src={comment.authorAvatar} alt="avatar" className="w-6 h-6 rounded-full border shadow-sm" />
@@ -126,7 +128,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
                   <span className="text-sm font-bold text-gray-800 hover:underline">{comment.authorName}</span>
                 </Link>
                 
-                {/* 🌟 修正：フォームで囲まず、直接ボタンコンポーネントを置く */}
+                {/* クリティカルボタン */}
                 {userId && (
                   <CriticalButton
                     commentId={comment.id}
@@ -135,6 +137,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
                   />
                 )}
 
+                {/* 🌟 復元：スキルタグ */}
                 <div className="flex gap-1 ml-1">
                   {commentSkills.map((skill: string, index: number) => (
                     <span key={index} className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -143,7 +146,21 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
                   ))}
                 </div>
 
-                <span className="text-xs text-gray-400 ml-auto">{new Date(comment.createdAt).toLocaleDateString()}</span>
+                {/* 日付と削除ボタン */}
+                <div className="ml-auto flex items-center">
+                  <span className="text-xs text-gray-400">
+                    {new Date(comment.createdAt).toLocaleDateString()}
+                  </span>
+                  
+                  {/* ログイン中のIDと、コメント作者のIDが一致した時だけゴミ箱を出す */}
+                  {userId === comment.authorId && (
+                    <DeleteCommentButton 
+                      commentId={comment.id} 
+                      threadId={threadId} 
+                    />
+                  )}
+                </div>
+
               </div>
               <p className="text-gray-600">{comment.content}</p>
             </div>

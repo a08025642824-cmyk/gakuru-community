@@ -121,3 +121,32 @@ export const privateMemos = sqliteTable('private_memos', {
   label: text('label').notNull().default('その他'), // 🌟 追加：AIが自動分類するラベル（初期値は'その他'）
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
+
+export const reviewRequests = sqliteTable('review_requests', {
+  id: text('id').primaryKey(),
+  authorId: text('author_id').notNull().references(() => users.id),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  
+  // 外部サイトのURL（個人開発アプリなど）
+  targetUrl: text('target_url'),
+  // 任意：Gakuru内のプロジェクトID（内部プロジェクトのレビューの場合に紐付ける）
+  linkedProjectId: text('linked_project_id'),
+  // 任意：スクリーンショットなどの画像URL
+  imageUrl: text('image_url'),
+  
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+// 🌟 2. 寄せられたフィードバック（コメント）のテーブル
+export const reviewFeedbacks = sqliteTable('review_feedbacks', {
+  id: text('id').primaryKey(),
+  requestId: text('request_id').notNull().references(() => reviewRequests.id),
+  authorId: text('author_id').notNull().references(() => users.id),
+  
+  // レビューのタイプ（先ほどのKPT風）
+  type: text('type', { enum: ['good', 'idea', 'fix', 'comment'] }).notNull().default('comment'),
+  content: text('content').notNull(),
+  
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});

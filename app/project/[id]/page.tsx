@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { put } from "@vercel/blob"; // 🌟 追加：Vercel Blob
 import ProjectChatForm from "./ProjectChatForm"; // 🌟 追加：先ほど作った高機能フォーム
+import DeleteMessageButton from "./DeleteMessageButton"; // 🌟 追加：プロジェクトチャット用の削除ボタン
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
@@ -192,9 +193,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                       {msg.authorAvatar ? <img src={msg.authorAvatar} alt="avatar" className="w-8 h-8 rounded-full border" /> : <div className="w-8 h-8 bg-gray-200 rounded-full border" />}
                     </Link>
                     <div className="flex-1">
-                      <div className="flex items-baseline justify-between mb-1">
+                      <div className="flex items-center gap-2 mb-1">
                         <Link href={`/user/${msg.authorId}`} className="font-bold text-sm text-gray-800 hover:underline">{msg.authorName}</Link>
                         <span className="text-[10px] text-gray-400">{new Date(msg.createdAt).toLocaleString()}</span>
+                        
+                        {/* 🌟 3. ログインユーザーとメッセージの作者が一致した時だけゴミ箱ボタンを出す */}
+                        {userId === msg.authorId && (
+                          <DeleteMessageButton messageId={msg.id} projectId={projectId} />
+                        )}
                       </div>
                       
                       {/* 🌟 画像があれば表示 */}

@@ -50,14 +50,7 @@ export default async function RootLayout({
                   <span className="hidden sm:inline">Gakuru</span>
                 </Link>
 
-                <nav className="hidden md:flex items-center gap-6">
-                  <Link href="/?tab=threads" className="text-sm font-bold text-gray-600 hover:text-black transition">
-                    💬 スレッド
-                  </Link>
-                  <Link href="/?tab=projects" className="text-sm font-bold text-gray-600 hover:text-black transition">
-                    🚀 プロジェクト
-                  </Link>
-                </nav>
+               
               </div>
 
               {/* 右側：ログイン状態に応じたメニュー */}
@@ -67,21 +60,35 @@ export default async function RootLayout({
                     {/* 🌟 1. AIメモ（セカンドブレイン）ボタンを追加 */}
                     <MemoHeaderButton />
 
-                    <Link href="/notifications" className="relative text-xl sm:text-sm font-bold text-gray-600 hover:text-black transition" title="通知">
+                    {/* 🔔 通知 */}
+                    <Link href="/notifications" className="group relative text-xl sm:text-sm font-bold text-gray-600 hover:text-black transition">
                       🔔
                       {unreadCount > 0 && (
                         <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] font-bold px-1 rounded-full min-w-[14px] h-[14px] flex items-center justify-center">
                           {unreadCount}
                         </span>
                       )}
+                      {/* 🌟 ツールチップ（PCではホバー、スマホでは長押しで出現） */}
+                      <span className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] font-normal px-2 py-1 rounded opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                        通知
+                      </span>
                     </Link>
 
-                    <Link href="/dm" className="text-xl sm:text-sm font-bold text-gray-600 hover:text-black transition" title="DM">
+                    {/* ✉️ DM */}
+                    <Link href="/dm" className="group relative text-xl sm:text-sm font-bold text-gray-600 hover:text-black transition">
                       ✉️<span className="hidden sm:inline"> DM</span>
+                      {/* PC版ではテキストが横に出ているので、スマホ版（sm:hidden）の時だけツールチップを出すようにしています */}
+                      <span className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] font-normal px-2 py-1 rounded opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 sm:hidden">
+                        DM
+                      </span>
                     </Link>
                     
-                    <Link href="/mypage" className="text-xl sm:text-sm font-bold text-gray-600 hover:text-black transition" title="マイページ">
+                    {/* 👤 マイページ */}
+                    <Link href="/mypage" className="group relative text-xl sm:text-sm font-bold text-gray-600 hover:text-black transition">
                       👤<span className="hidden sm:inline"> マイページ</span>
+                      <span className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] font-normal px-2 py-1 rounded opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 sm:hidden">
+                        マイページ
+                      </span>
                     </Link>
 
                     {/* スレッド・プロジェクト作成ボタン */}
