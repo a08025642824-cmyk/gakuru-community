@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "../db/index";
-import { users, threads, projects, comments, criticalVotes } from "../db/schema";
+// 🌟 1. schema に reviewRequests を追加インポート
+import { users, threads, projects, comments, criticalVotes, reviewRequests } from "../db/schema";
 import { desc, eq, gte } from "drizzle-orm";
 import Link from "next/link";
 
@@ -32,6 +33,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
   // 2. データベースからデータを取得（選択されているタブに応じて切り替え）
   let threadList: any[] = [];
   let projectList: any[] = [];
+  let reviewList: any[] = []; // 🌟 2. レビュー用の配列を追加
 
   if (currentTab === "threads") {
     // ① スレッドの基本情報を取得
@@ -50,7 +52,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       .leftJoin(users, eq(threads.authorId, users.id))
       .where(currentCategory ? eq(threads.categoryId, currentCategory) : undefined);
 
-    // 🌟 ② 過去3日間のデータを取得（トレンド計算用）
+    // ② 過去3日間のデータを取得（トレンド計算用）
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     
     const recentComments = await db
@@ -63,34 +65,31 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       .from(criticalVotes)
       .where(gte(criticalVotes.createdAt, threeDaysAgo));
 
-    // 🌟 ③ 重みの設定（いつでもここでバランス調整できます）
+    // ③ 重みの設定
     const WEIGHTS = {
       COMMENT: 1,      // 1コメント = 1点
       USER: 5,         // 1人参加 = 5点
       CRITICAL: 30,    // 1クリティカル = 30点（特大ボーナス）
     };
 
-    // 🌟 ④ 各スレッドのトレンドスコアを計算
+    // ④ 各スレッドのトレンドスコアを計算
     threadList = fetchedThreads.map((thread) => {
-      // このスレッドへの直近のコメントを抽出
       const threadComments = recentComments.filter((c) => c.threadId === thread.id);
-      
       const commentCount = threadComments.length;
       const uniqueUsers = new Set(threadComments.map((c) => c.authorId)).size;
       
       const commentIds = threadComments.map((c) => c.id);
       const criticalCount = recentVotes.filter((v) => commentIds.includes(v.commentId)).length;
 
-      // アルゴリズムでスコア算出
       const trendScore = (commentCount * WEIGHTS.COMMENT) + (uniqueUsers * WEIGHTS.USER) + (criticalCount * WEIGHTS.CRITICAL);
 
       return {
         ...thread,
-        trendScore, // 計算結果を一時的に持たせる（画面には出さない）
+        trendScore,
       };
     });
 
-    // 🌟 ⑤ トレンドスコアが高い順（同点なら新しい順）に並び替え
+    // ⑤ トレンドスコアが高い順（同点なら新しい順）に並び替え
     threadList.sort((a, b) => {
       if (b.trendScore !== a.trendScore) {
         return b.trendScore - a.trendScore;
@@ -115,14 +114,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       .from(projects)
       .leftJoin(users, eq(projects.ownerId, users.id));
 
-    // 🌟 ② プロジェクトは「募集ステータス優先 ＋ 新着順」で並び替え
+    // ② プロジェクトは「募集ステータス優先 ＋ 新着順」で並び替え
     const getStatusScore = (status: string) => {
-      if (status === "メンバー募集中") return 100; // 最優先で一番上に！
+      if (status === "メンバー募集中") return 100;
       if (status === "企画中") return 80;
       if (status === "開発中") return 60;
       if (status === "テスト中") return 40;
       if (status === "リリース済み") return 20;
-      return 0; // 停止中など
+      return 0; 
     };
 
     projectList = fetchedProjects.sort((a, b) => {
@@ -130,10 +129,26 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       const scoreB = getStatusScore(b.progressStatus);
       
       if (scoreA !== scoreB) {
-        return scoreB - scoreA; // ステータスの点数が高い順
+        return scoreB - scoreA; 
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+
+  } else if (currentTab === "reviews") {
+    // 🌟 3. レビュー募集一覧を取得
+    reviewList = await db
+      .select({
+        id: reviewRequests.id,
+        title: reviewRequests.title,
+        description: reviewRequests.description,
+        targetUrl: reviewRequests.targetUrl,
+        createdAt: reviewRequests.createdAt,
+        authorName: users.name,
+        authorAvatar: users.avatarUrl,
+      })
+      .from(reviewRequests)
+      .leftJoin(users, eq(reviewRequests.authorId, users.id))
+      .orderBy(desc(reviewRequests.createdAt));
   }
 
   const getCategoryLabel = (id: string | null) => {
@@ -146,23 +161,31 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
   return (
     <main className="max-w-4xl mx-auto p-8 mt-4">
       
-      {/* ▼ メインタブ切り替え（スレッド vs プロジェクト） */}
-      <div className="flex gap-8 mb-8 border-b-2 border-gray-100">
+      {/* ▼ メインタブ切り替え（スマホでは横スクロール可能に最適化） */}
+      <div className="flex gap-5 sm:gap-8 mb-8 border-b-2 border-gray-100 overflow-x-auto scrollbar-hide">
         <Link 
           href="/?tab=threads" 
-          className={`text-xl font-bold pb-3 transition ${
+          className={`text-base sm:text-xl font-bold pb-3 whitespace-nowrap transition ${
             currentTab === "threads" ? "text-black border-b-2 border-black -mb-[2px]" : "text-gray-400 hover:text-gray-600"
           }`}
         >
-          💬 スレッド・雑談
+          💬 スレッド
         </Link>
         <Link 
           href="/?tab=projects" 
-          className={`text-xl font-bold pb-3 transition ${
+          className={`text-base sm:text-xl font-bold pb-3 whitespace-nowrap transition ${
             currentTab === "projects" ? "text-black border-b-2 border-black -mb-[2px]" : "text-gray-400 hover:text-gray-600"
           }`}
         >
-          🚀 プロジェクト募集
+          🚀 プロジェクト
+        </Link>
+        <Link 
+          href="/?tab=reviews" 
+          className={`text-base sm:text-xl font-bold pb-3 whitespace-nowrap transition ${
+            currentTab === "reviews" ? "text-black border-b-2 border-black -mb-[2px]" : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          🎯 レビュー募集
         </Link>
       </div>
 
@@ -194,13 +217,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
               threadList.map((thread) => {
                 const skillsArray = Array.isArray(thread.authorSkills) ? thread.authorSkills : [];
                 return (
-                  // 🌟 変更1：親要素の relative を削除
                   <Link href={`/thread/${thread.id}`} key={thread.id} className="block bg-white p-5 sm:p-6 rounded-lg shadow-sm border hover:shadow-md transition">
-                    
-                    {/* 🌟 変更2：Flexboxでスマホ時は縦並び(flex-col)、PC時は横並び(sm:flex-row)に自動調整 */}
                     <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-4">
                       
-                      {/* 左（スマホ時は上）側：アイコン・名前・スキル */}
                       <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-1">
                         {thread.authorAvatar ? (
                           <img src={thread.authorAvatar} alt="avatar" className="w-8 h-8 rounded-full shrink-0" />
@@ -211,7 +230,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
                         
                         <div className="flex gap-1 flex-wrap">
                           {skillsArray.map((skill: string, index: number) => (
-                            // 🌟 改行防止(whitespace-nowrap)を追加
                             <span key={index} className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
                               {skill}
                             </span>
@@ -219,8 +237,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
                         </div>
                       </div>
 
-                      {/* 右（スマホ時は下）側：カテゴリーと日付 */}
-                      {/* スマホではカテゴリーを左、日付を右に散らす（justify-between） */}
                       <div className="flex items-center justify-between w-full sm:w-auto sm:flex-col sm:items-end gap-2 shrink-0">
                         <span className="bg-gray-100 text-gray-600 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap">
                           {getCategoryLabel(thread.categoryId)}
@@ -230,7 +246,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
 
                     </div>
 
-                    {/* 🌟 変更3：タイトルの pr-24（右側の余白）を削除（絶対配置をやめたため不要） */}
                     <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-2">{thread.title}</h3>
                     <p className="text-gray-600 line-clamp-3 text-sm sm:text-base">{thread.content}</p>
                   </Link>
@@ -246,7 +261,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       ========================================= */}
       {currentTab === "projects" && (
         <div className="w-full space-y-6">
-          
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-gray-800">募集中のプロジェクト</h2>
             <Link href="/project/create" className="bg-black text-white px-5 py-2 rounded-full font-bold text-sm hover:bg-gray-800 transition">
@@ -292,6 +306,66 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
                 </Link>
               );
             })
+          )}
+        </div>
+      )}
+
+      {/* =========================================
+          🌟 タブが「レビュー募集」のときの表示
+      ========================================= */}
+      {currentTab === "reviews" && (
+        <div className="w-full space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800">レビュー募集中のプロダクト</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                みんなのアプリやサイトを触って、フィードバックを送りましょう！
+              </p>
+            </div>
+            
+            {/* 先ほど作成した投稿画面（/reviews/create）へのリンク */}
+            <Link href="/reviews/create" className="bg-black text-white px-5 py-2 rounded-full font-bold text-sm hover:bg-gray-800 transition whitespace-nowrap text-center">
+              ＋ アプリを投稿する
+            </Link>
+          </div>
+
+          {reviewList.length === 0 ? (
+            <p className="text-gray-500 text-center py-12 bg-white rounded-lg border">まだレビュー募集がありません。あなたのアプリを一番乗りで投稿してみましょう！</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {reviewList.map((req) => (
+                <Link key={req.id} href={`/reviews/${req.id}`} className="bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition flex flex-col h-full group">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-gray-800 group-hover:text-blue-600 transition mb-2 line-clamp-2">
+                      {req.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 line-clamp-3 mb-4">
+                      {req.description}
+                    </p>
+                  </div>
+                  
+                  {req.targetUrl && (
+                    <div className="mb-4 text-[10px] text-blue-500 font-mono bg-blue-50 px-2 py-1 rounded truncate">
+                      🔗 {req.targetUrl}
+                    </div>
+                  )}
+                  
+                  <div className="border-t pt-4 flex items-center justify-between mt-auto">
+                    <div className="flex items-center gap-2">
+                      {req.authorAvatar ? (
+                        <img src={req.authorAvatar} className="w-6 h-6 rounded-full border" alt="avatar" />
+                      ) : (
+                        <div className="w-6 h-6 bg-gray-200 rounded-full border" />
+                      )}
+                      <span className="text-xs font-bold text-gray-700">{req.authorName}</span>
+                    </div>
+                    <span className="text-[10px] text-gray-400">
+                      {new Date(req.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
           )}
         </div>
       )}
