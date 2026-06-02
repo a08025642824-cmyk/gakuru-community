@@ -70,7 +70,7 @@ export default async function CreateProjectPage() {
     });
 
     // 🌟 一旦トップページに戻す（あとでプロジェクト詳細画面ができたらそっちに飛ばします）
-    redirect("/");
+    redirect(`/project/${projectId}`);
   }
 
   return (

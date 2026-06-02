@@ -123,14 +123,19 @@ export default function PrivateMemoDrawer({ isOpen, onClose }: { isOpen: boolean
             </div>
 
             {/* 🌟 変更点4：確定分を黒字、認識中の分をグレーで表示するリッチなUI */}
-            <div className="border rounded-lg p-4 bg-gray-50 h-48 overflow-y-auto text-sm leading-relaxed font-mono">
-              {finalText || interimText ? (
-                <>
-                  <span className="text-gray-800">{finalText}</span>
-                  <span className="text-gray-400">{interimText}</span>
-                </>
-              ) : (
-                <span className="text-gray-400 italic">ここに喋った言葉がリアルタイムに表示されます...</span>
+            <div className="border rounded-lg bg-gray-50 h-48 flex flex-col focus-within:ring-2 focus-within:ring-black transition overflow-hidden">
+              <textarea
+                value={finalText}
+                onChange={(e) => setFinalText(e.target.value)}
+                placeholder="ここに喋った言葉が入力されます。キーボードでの直接修正も可能です..."
+                className="flex-1 w-full bg-transparent p-4 outline-none resize-none text-sm leading-relaxed text-gray-800 font-mono"
+              />
+              
+              {/* 喋っている最中の言葉は、テキストエリアの下部にグレーで表示 */}
+              {interimText && (
+                <div className="px-4 pb-4 text-gray-400 text-sm font-mono italic animate-pulse border-t border-gray-100 pt-2 bg-gray-100/50">
+                  {interimText}
+                </div>
               )}
             </div>
           </div>

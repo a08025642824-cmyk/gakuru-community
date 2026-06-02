@@ -150,6 +150,18 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             )}
             
             <h1 className="text-3xl font-bold mb-6 text-gray-800">{project.title}</h1>
+            {/* 🌟 追加：Twitter (X) シェアボタン */}
+            <div className="mb-8">
+              <a 
+                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`🚀 「${project.title}」のメンバーを募集中！\n\n${project.description.slice(0, 50)}...\n\nGakuru Communityで一緒に開発しませんか？\n#GakuruCommunity #個人開発`)}&url=${encodeURIComponent(`https://gakuru-community.vercel.app/project/${project.id}`)}`}
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="bg-black hover:bg-gray-800 text-white text-sm font-bold py-2 px-5 rounded-full inline-flex items-center gap-2 transition shadow-sm"
+              >
+                <span className="text-lg leading-none">𝕏</span> ポストして仲間を集める
+              </a>
+            </div>
+          
             
             <div className="mb-8 pb-6 border-b flex items-center">
               <Link href={`/user/${project.ownerId}`} className="flex items-center gap-3 hover:opacity-80 transition">
