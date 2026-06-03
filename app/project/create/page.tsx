@@ -9,7 +9,7 @@ export default async function CreateProjectPage() {
   
   // ログインしていない場合はトップページへ
   if (!userId) {
-    redirect("/");
+    redirect("/home");
   }
 
   // プロジェクトを保存する処理（Server Action）
@@ -75,7 +75,7 @@ export default async function CreateProjectPage() {
 
   return (
     <main className="max-w-3xl mx-auto p-8 mt-4">
-      <Link href="/" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
+      <Link href="/home" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
         ← トップに戻る
       </Link>
 

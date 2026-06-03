@@ -12,7 +12,7 @@ export default async function DMChatPage({ params }: { params: Promise<{ id: str
   const { userId: myId } = await auth();
   
   if (!myId) {
-    redirect("/");
+    redirect("/home");
   }
 
   const resolvedParams = await params;

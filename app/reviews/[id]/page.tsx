@@ -51,7 +51,8 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
 
   return (
     <main className="max-w-3xl mx-auto p-4 sm:p-8 mt-4 animate-fade-in">
-      <Link href="/?tab=reviews" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
+      {/* 🌟 修正： /home/tab=reviews を /home?tab=reviews に変更 */}
+      <Link href="/home?tab=reviews" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
         ← レビューボードに戻る
       </Link>
 

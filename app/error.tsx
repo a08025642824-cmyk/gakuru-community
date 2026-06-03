@@ -84,7 +84,7 @@ export default function Error({
           </button>
           
           <Link
-            href="/"
+            href="/home"
             className="w-full sm:w-auto inline-flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-6 py-3 rounded-full text-sm border border-slate-700 transition-all duration-200 active:scale-95"
           >
             ホームへ戻る

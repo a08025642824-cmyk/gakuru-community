@@ -7,7 +7,7 @@ export default async function CreateThreadPage() {
   // 1. ログインチェック（ログインしてない人はトップページに弾く）
   const { userId } = await auth();
   if (!userId) {
-    redirect("/");
+    redirect("/home");
   }
 
   // 2. フォーム送信ボタンが押された時の処理（Server Action）
@@ -34,7 +34,7 @@ export default async function CreateThreadPage() {
     });
 
     // 書き込みが終わったらトップページに戻る
-    redirect("/");
+    redirect("/home");
   }
 
   return (

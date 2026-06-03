@@ -61,7 +61,7 @@ export default function NotFound() {
         {/* アクションボタン */}
         <div className="pt-4">
           <Link
-            href="/"
+            href="/home"
             className="inline-flex items-center justify-center bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-3 rounded-full text-sm shadow-md shadow-amber-500/10 hover:shadow-amber-500/20 transition-all duration-200 active:scale-95"
           >
             🚀 コミュニティのホームへ戻る

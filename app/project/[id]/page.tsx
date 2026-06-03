@@ -1,12 +1,14 @@
 import { auth } from "@clerk/nextjs/server";
 import { db } from "../../../db/index";
-import { projects, projectMembers, users, projectMessages } from "../../../db/schema";
-import { eq, desc } from "drizzle-orm";
+// 🌟 1. schema に userStats を追加
+import { projects, projectMembers, users, projectMessages, userStats } from "../../../db/schema";
+// 🌟 2. drizzle-orm に sql を追加（計算用）
+import { eq, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
-import { put } from "@vercel/blob"; // 🌟 追加：Vercel Blob
-import ProjectChatForm from "./ProjectChatForm"; // 🌟 追加：先ほど作った高機能フォーム
-import DeleteMessageButton from "./DeleteMessageButton"; // 🌟 追加：プロジェクトチャット用の削除ボタン
+import { put } from "@vercel/blob"; 
+import ProjectChatForm from "./ProjectChatForm"; 
+import DeleteMessageButton from "./DeleteMessageButton"; 
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
@@ -58,13 +60,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const isMember = membersData.some((member) => member.userId === userId);
   const rolesArray = Array.isArray(project.recruitingRoles) ? project.recruitingRoles : [];
 
-  // 3. チャット履歴（🌟 画像URLを取得できるように追加）
+  // 3. チャット履歴
   const chatMessages = await db
     .select({
       id: projectMessages.id,
       authorId: projectMessages.authorId,
       content: projectMessages.content,
-      imageUrl: projectMessages.imageUrl, // 🌟 これを追加！
+      imageUrl: projectMessages.imageUrl,
       createdAt: projectMessages.createdAt,
       authorName: users.name,
       authorAvatar: users.avatarUrl,
@@ -80,6 +82,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     const { userId } = await auth();
     if (!userId) return;
     const roleText = formData.get("roleText") as string || "メンバー";
+    
     await db.insert(projectMembers).values({
       id: crypto.randomUUID(),
       projectId: projectId,
@@ -88,10 +91,28 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       status: "approved",
       createdAt: new Date(),
     });
+
+    // 🌟 追加：プロジェクトに参加したら 10ポイント 付与！
+    await db.insert(userStats).values({
+      userId: userId,
+      currentPoints: 10,
+      totalContributionScore: 10,
+      feedbackCount: 1,
+      updatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: userStats.userId,
+      set: {
+        currentPoints: sql`${userStats.currentPoints} + 10`,
+        totalContributionScore: sql`${userStats.totalContributionScore} + 10`,
+        feedbackCount: sql`${userStats.feedbackCount} + 1`,
+        updatedAt: new Date(),
+      }
+    });
+
     revalidatePath(`/project/${projectId}`);
   }
 
-  // 🌟 画像対応版のチャット送信処理
+  // チャット送信処理
   async function sendMessage(formData: FormData) {
     "use server";
     const { userId } = await auth();
@@ -100,12 +121,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     const content = formData.get("content") as string;
     const imageFile = formData.get("image") as File;
 
-    // 🌟 テキストも画像もない場合は何もしない
     if (!content.trim() && (!imageFile || imageFile.size === 0)) return;
 
     let imageUrl = null;
 
-    // 🌟 画像が選択されていればVercel Blobにアップロード
     if (imageFile && imageFile.size > 0) {
       const blob = await put(imageFile.name, imageFile, {
         access: "public",
@@ -118,15 +137,33 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       projectId: projectId,
       authorId: userId,
       content: content,
-      imageUrl: imageUrl, // 🌟 画像URLを保存
+      imageUrl: imageUrl, 
       createdAt: new Date(),
     });
+
+    // 🌟 追加：チャットで発言したら 10ポイント 付与！
+    await db.insert(userStats).values({
+      userId: userId,
+      currentPoints: 10,
+      totalContributionScore: 10,
+      feedbackCount: 1,
+      updatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: userStats.userId,
+      set: {
+        currentPoints: sql`${userStats.currentPoints} + 10`,
+        totalContributionScore: sql`${userStats.totalContributionScore} + 10`,
+        feedbackCount: sql`${userStats.feedbackCount} + 1`,
+        updatedAt: new Date(),
+      }
+    });
+
     revalidatePath(`/project/${projectId}`);
   }
 
   return (
     <main className="max-w-4xl mx-auto p-8 mt-4">
-      <Link href="/?tab=projects" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
+      <Link href="/home?tab=projects" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
         ← プロジェクト一覧に戻る
       </Link>
 
@@ -150,7 +187,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             )}
             
             <h1 className="text-3xl font-bold mb-6 text-gray-800">{project.title}</h1>
-            {/* 🌟 追加：Twitter (X) シェアボタン */}
             <div className="mb-8">
               <a 
                 href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`🚀 「${project.title}」のメンバーを募集中！\n\n${project.description.slice(0, 50)}...\n\nGakuru Communityで一緒に開発しませんか？\n#GakuruCommunity #個人開発`)}&url=${encodeURIComponent(`https://gakuru-community.vercel.app/project/${project.id}`)}`}
@@ -188,7 +224,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <div className="bg-white p-6 rounded-lg shadow-sm border">
             <h2 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">💬 プロジェクト・チャット</h2>
             
-            {/* 🌟 メンバーの場合は高機能フォームを表示 */}
             {isMember ? (
               <div className="mb-6">
                 <ProjectChatForm sendMessage={sendMessage} />
@@ -209,13 +244,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                         <Link href={`/user/${msg.authorId}`} className="font-bold text-sm text-gray-800 hover:underline">{msg.authorName}</Link>
                         <span className="text-[10px] text-gray-400">{new Date(msg.createdAt).toLocaleString()}</span>
                         
-                        {/* 🌟 3. ログインユーザーとメッセージの作者が一致した時だけゴミ箱ボタンを出す */}
                         {userId === msg.authorId && (
                           <DeleteMessageButton messageId={msg.id} projectId={projectId} />
                         )}
                       </div>
                       
-                      {/* 🌟 画像があれば表示 */}
                       {msg.imageUrl && (
                         <img 
                           src={msg.imageUrl} 
@@ -224,7 +257,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                         />
                       )}
                       
-                      {/* 🌟 テキストがあれば表示 */}
                       {msg.content && msg.content.trim() !== "" && (
                         <p className="text-sm text-gray-700 whitespace-pre-wrap">{msg.content}</p>
                       )}
@@ -237,7 +269,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
         </div>
 
-        {/* 右側のサイドバー部分は変更なし */}
         <div className="space-y-6">
           {isMember ? (
             <div className="bg-green-50 border border-green-200 p-6 rounded-lg text-center shadow-sm">
@@ -274,7 +305,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
 
-          {/* メンバー専用ダッシュボード */}
           {isMember && (
             <div className="bg-gray-900 p-6 rounded-lg shadow-md text-white">
               <h3 className="font-bold text-sm mb-4 flex items-center gap-2">🔒 開発ダッシュボード</h3>

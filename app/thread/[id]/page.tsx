@@ -1,7 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { db } from "../../../db/index";
-import { threads, comments, users, criticalVotes } from "../../../db/schema";
-import { eq, desc } from "drizzle-orm";
+// 🌟 1. schema に userStats を追加
+import { threads, comments, users, criticalVotes, userStats } from "../../../db/schema";
+// 🌟 2. drizzle-orm に sql を追加（計算用）
+import { eq, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import CriticalButton from "./CriticalButton";
@@ -62,6 +64,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
     const content = formData.get("content") as string;
     if (!content.trim()) return;
 
+    // コメントを保存
     await db.insert(comments).values({
       id: crypto.randomUUID(),
       threadId: threadId,
@@ -69,6 +72,26 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
       content: content,
       createdAt: new Date(),
     });
+
+    // 🌟 🌟 追加：スレッドにコメントをしたら 10ポイント 付与！ 🌟 🌟
+    await db
+      .insert(userStats)
+      .values({
+        userId: userId,
+        currentPoints: 10,
+        totalContributionScore: 10,
+        feedbackCount: 1,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: userStats.userId,
+        set: {
+          currentPoints: sql`${userStats.currentPoints} + 10`,
+          totalContributionScore: sql`${userStats.totalContributionScore} + 10`,
+          feedbackCount: sql`${userStats.feedbackCount} + 1`,
+          updatedAt: new Date(),
+        }
+      });
 
     revalidatePath(`/thread/${threadId}`);
   }
@@ -78,8 +101,9 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
 
   return (
     <main className="max-w-3xl mx-auto p-8 mt-10">
-      <Link href="/" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
-        ← トップに戻る
+      {/* 🌟 修正：href="/home" から href="/home?tab=threads" に変更（一覧に戻りやすくする配慮） */}
+      <Link href="/home?tab=threads" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
+        ← スレッド一覧に戻る
       </Link>
 
       {/* ▼ スレッド本体の表示 */}
@@ -118,7 +142,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
             <div key={comment.id} className="bg-gray-50 p-4 rounded-lg border">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
 
-                {/* 🌟 復元：アバターと名前 */}
+                {/* アバターと名前 */}
                 <Link href={`/user/${comment.authorId}`} className="flex items-center gap-2 hover:opacity-80 transition">
                   {comment.authorAvatar ? (
                     <img src={comment.authorAvatar} alt="avatar" className="w-6 h-6 rounded-full border shadow-sm" />
@@ -137,7 +161,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
                   />
                 )}
 
-                {/* 🌟 復元：スキルタグ */}
+                {/* スキルタグ */}
                 <div className="flex gap-1 ml-1">
                   {commentSkills.map((skill: string, index: number) => (
                     <span key={index} className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -152,7 +176,6 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
                     {new Date(comment.createdAt).toLocaleDateString()}
                   </span>
                   
-                  {/* ログイン中のIDと、コメント作者のIDが一致した時だけゴミ箱を出す */}
                   {userId === comment.authorId && (
                     <DeleteCommentButton 
                       commentId={comment.id} 
@@ -175,7 +198,7 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
             name="content"
             required
             rows={3}
-            className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:ring-2 focus:ring-black transition"
             placeholder="コメントを書き込む..."
           />
           <button type="submit" className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-4 rounded transition self-end">

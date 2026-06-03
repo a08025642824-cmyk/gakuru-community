@@ -15,7 +15,7 @@ export default async function SecondBrainPage({
   searchParams: Promise<{ view?: string }>;
 }) {
   const { userId } = await auth();
-  if (!userId) redirect("/");
+  if (!userId) redirect("/home");
 
   const params = await searchParams;
   const viewMode = params.view || "date";
@@ -60,7 +60,7 @@ export default async function SecondBrainPage({
         <h1 className="text-2xl sm:text-3xl font-black text-gray-800 flex items-center gap-2">
           🧠 セカンドブレイン
         </h1>
-        <Link href="/" className="text-sm font-bold text-gray-500 hover:text-black transition">
+        <Link href="/home" className="text-sm font-bold text-gray-500 hover:text-black transition">
           ← 戻る
         </Link>
       </div>

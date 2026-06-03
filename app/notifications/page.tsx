@@ -8,7 +8,7 @@ import Link from "next/link";
 
 export default async function NotificationsPage() {
   const { userId } = await auth();
-  if (!userId) redirect("/");
+  if (!userId) redirect("/home");
 
   // 1. 通知一覧を取得（新着順）
   const notificationList = await db

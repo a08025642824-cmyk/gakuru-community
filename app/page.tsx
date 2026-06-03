@@ -1,375 +1,158 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { db } from "../db/index";
-// 🌟 1. schema に reviewRequests を追加インポート
-import { users, threads, projects, comments, criticalVotes, reviewRequests } from "../db/schema";
-import { desc, eq, gte } from "drizzle-orm";
 import Link from "next/link";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ category?: string, tab?: string }> }) {
-  const { userId } = await auth();
-  const user = await currentUser();
-
-  const resolvedSearchParams = await searchParams;
-  const currentCategory = resolvedSearchParams.category;
-  const currentTab = resolvedSearchParams.tab || "threads";
-
-  // 1. ユーザー情報の保存・更新
-  if (user) {
-    await db.insert(users).values({
-      id: user.id,
-      name: user.firstName || user.lastName || "名無しユーザー",
-      username: user.username || `user_${user.id.slice(0, 8)}`,
-      avatarUrl: user.imageUrl,
-      createdAt: new Date(),
-    }).onConflictDoUpdate({
-      target: users.id,
-      set: {
-        name: user.firstName || user.lastName || "名無しユーザー",
-        avatarUrl: user.imageUrl,
-      }
-    });
-  }
-
-  // 2. データベースからデータを取得（選択されているタブに応じて切り替え）
-  let threadList: any[] = [];
-  let projectList: any[] = [];
-  let reviewList: any[] = []; // 🌟 2. レビュー用の配列を追加
-
-  if (currentTab === "threads") {
-    // ① スレッドの基本情報を取得
-    const fetchedThreads = await db
-      .select({
-        id: threads.id,
-        title: threads.title,
-        content: threads.content,
-        createdAt: threads.createdAt,
-        categoryId: threads.categoryId,
-        authorName: users.name,
-        authorAvatar: users.avatarUrl,
-        authorSkills: users.skills, 
-      })
-      .from(threads)
-      .leftJoin(users, eq(threads.authorId, users.id))
-      .where(currentCategory ? eq(threads.categoryId, currentCategory) : undefined);
-
-    // ② 過去3日間のデータを取得（トレンド計算用）
-    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    
-    const recentComments = await db
-      .select()
-      .from(comments)
-      .where(gte(comments.createdAt, threeDaysAgo));
-
-    const recentVotes = await db
-      .select()
-      .from(criticalVotes)
-      .where(gte(criticalVotes.createdAt, threeDaysAgo));
-
-    // ③ 重みの設定
-    const WEIGHTS = {
-      COMMENT: 1,      // 1コメント = 1点
-      USER: 5,         // 1人参加 = 5点
-      CRITICAL: 30,    // 1クリティカル = 30点（特大ボーナス）
-    };
-
-    // ④ 各スレッドのトレンドスコアを計算
-    threadList = fetchedThreads.map((thread) => {
-      const threadComments = recentComments.filter((c) => c.threadId === thread.id);
-      const commentCount = threadComments.length;
-      const uniqueUsers = new Set(threadComments.map((c) => c.authorId)).size;
-      
-      const commentIds = threadComments.map((c) => c.id);
-      const criticalCount = recentVotes.filter((v) => commentIds.includes(v.commentId)).length;
-
-      const trendScore = (commentCount * WEIGHTS.COMMENT) + (uniqueUsers * WEIGHTS.USER) + (criticalCount * WEIGHTS.CRITICAL);
-
-      return {
-        ...thread,
-        trendScore,
-      };
-    });
-
-    // ⑤ トレンドスコアが高い順（同点なら新しい順）に並び替え
-    threadList.sort((a, b) => {
-      if (b.trendScore !== a.trendScore) {
-        return b.trendScore - a.trendScore;
-      }
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
-  } else if (currentTab === "projects") {
-    // ① プロジェクト一覧を取得
-    const fetchedProjects = await db
-      .select({
-        id: projects.id,
-        title: projects.title,
-        description: projects.description,
-        progressStatus: projects.progressStatus,
-        recruitingRoles: projects.recruitingRoles,
-        isOpenToAll: projects.isOpenToAll,
-        createdAt: projects.createdAt,
-        ownerName: users.name,
-        ownerAvatar: users.avatarUrl,
-      })
-      .from(projects)
-      .leftJoin(users, eq(projects.ownerId, users.id));
-
-    // ② プロジェクトは「募集ステータス優先 ＋ 新着順」で並び替え
-    const getStatusScore = (status: string) => {
-      if (status === "メンバー募集中") return 100;
-      if (status === "企画中") return 80;
-      if (status === "開発中") return 60;
-      if (status === "テスト中") return 40;
-      if (status === "リリース済み") return 20;
-      return 0; 
-    };
-
-    projectList = fetchedProjects.sort((a, b) => {
-      const scoreA = getStatusScore(a.progressStatus);
-      const scoreB = getStatusScore(b.progressStatus);
-      
-      if (scoreA !== scoreB) {
-        return scoreB - scoreA; 
-      }
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
-  } else if (currentTab === "reviews") {
-    // 🌟 3. レビュー募集一覧を取得
-    reviewList = await db
-      .select({
-        id: reviewRequests.id,
-        title: reviewRequests.title,
-        description: reviewRequests.description,
-        targetUrl: reviewRequests.targetUrl,
-        createdAt: reviewRequests.createdAt,
-        authorName: users.name,
-        authorAvatar: users.avatarUrl,
-      })
-      .from(reviewRequests)
-      .leftJoin(users, eq(reviewRequests.authorId, users.id))
-      .orderBy(desc(reviewRequests.createdAt));
-  }
-
-  const getCategoryLabel = (id: string | null) => {
-    if (id === "tech") return "💻 技術・プログラミング";
-    if (id === "idea") return "💡 アイデア・企画";
-    if (id === "chat") return "☕️ 雑談";
-    return "未分類";
-  };
-
+export default function EnhancedLandingPage() {
   return (
-    <main className="max-w-4xl mx-auto p-8 mt-4">
+    <div className="min-h-screen bg-white text-gray-900 font-sans selection:bg-black selection:text-white overflow-x-hidden">
       
-      {/* ▼ メインタブ切り替え（スマホでは横スクロール可能に最適化） */}
-      <div className="flex gap-5 sm:gap-8 mb-8 border-b-2 border-gray-100 overflow-x-auto scrollbar-hide">
-        <Link 
-          href="/?tab=threads" 
-          className={`text-base sm:text-xl font-bold pb-3 whitespace-nowrap transition ${
-            currentTab === "threads" ? "text-black border-b-2 border-black -mb-[2px]" : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          💬 スレッド
-        </Link>
-        <Link 
-          href="/?tab=projects" 
-          className={`text-base sm:text-xl font-bold pb-3 whitespace-nowrap transition ${
-            currentTab === "projects" ? "text-black border-b-2 border-black -mb-[2px]" : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          🚀 プロジェクト
-        </Link>
-        <Link 
-          href="/?tab=reviews" 
-          className={`text-base sm:text-xl font-bold pb-3 whitespace-nowrap transition ${
-            currentTab === "reviews" ? "text-black border-b-2 border-black -mb-[2px]" : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          🎯 レビュー募集
-        </Link>
+      {/* --- 背景の微細な光エフェクト --- */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[600px] pointer-events-none opacity-60 z-0">
+        <div className="absolute top-[-10%] left-[20%] w-[600px] h-[600px] rounded-full bg-gradient-to-tr from-blue-50 to-indigo-50/40 blur-[120px]"></div>
+        <div className="absolute top-[10%] right-[10%] w-[500px] h-[500px] rounded-full bg-gradient-to-br from-gray-50 to-purple-50/30 blur-[100px]"></div>
       </div>
 
-      {/* =========================================
-          タブが「スレッド」のときの表示
-      ========================================= */}
-      {currentTab === "threads" && (
-        <>
-          {/* カテゴリー絞り込みタブ */}
-          <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
-            <Link href="/?tab=threads" className={`px-4 py-2 rounded-full text-sm font-bold transition whitespace-nowrap ${!currentCategory ? "bg-black text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>
-              すべて
-            </Link>
-            <Link href="/?tab=threads&category=tech" className={`px-4 py-2 rounded-full text-sm font-bold transition whitespace-nowrap ${currentCategory === "tech" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>
-              💻 技術・プログラミング
-            </Link>
-            <Link href="/?tab=threads&category=idea" className={`px-4 py-2 rounded-full text-sm font-bold transition whitespace-nowrap ${currentCategory === "idea" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>
-              💡 アイデア・企画
-            </Link>
-            <Link href="/?tab=threads&category=chat" className={`px-4 py-2 rounded-full text-sm font-bold transition whitespace-nowrap ${currentCategory === "chat" ? "bg-yellow-500 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>
-              ☕️ 雑談
-            </Link>
+      {/* --- Hero Section --- */}
+      <section className="relative pt-36 pb-24 md:pt-52 md:pb-36 px-6 z-10">
+        <div className="max-w-5xl mx-auto text-center">
+          
+          {/* アナウンスバッジ */}
+          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-gray-100 bg-gray-50/50 backdrop-blur-md text-xs font-medium text-gray-600 mb-10 shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-black"></span>
+            エンジニアのための新しい共創空間
           </div>
 
-          <div className="w-full space-y-4">
-            {threadList.length === 0 ? (
-              <p className="text-gray-500 text-center py-12 bg-white rounded-lg border">このカテゴリーにはまだスレッドがありません。</p>
-            ) : (
-              threadList.map((thread) => {
-                const skillsArray = Array.isArray(thread.authorSkills) ? thread.authorSkills : [];
-                return (
-                  <Link href={`/thread/${thread.id}`} key={thread.id} className="block bg-white p-5 sm:p-6 rounded-lg shadow-sm border hover:shadow-md transition">
-                    <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-4">
-                      
-                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-1">
-                        {thread.authorAvatar ? (
-                          <img src={thread.authorAvatar} alt="avatar" className="w-8 h-8 rounded-full shrink-0" />
-                        ) : (
-                          <div className="w-8 h-8 bg-gray-200 rounded-full shrink-0" />
-                        )}
-                        <span className="text-sm font-medium text-gray-800">{thread.authorName}</span>
-                        
-                        <div className="flex gap-1 flex-wrap">
-                          {skillsArray.map((skill: string, index: number) => (
-                            <span key={index} className="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
-                              {skill}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between w-full sm:w-auto sm:flex-col sm:items-end gap-2 shrink-0">
-                        <span className="bg-gray-100 text-gray-600 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap">
-                          {getCategoryLabel(thread.categoryId)}
-                        </span>
-                        <span className="text-xs text-gray-400">{new Date(thread.createdAt).toLocaleDateString()}</span>
-                      </div>
-
-                    </div>
-
-                    <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-2">{thread.title}</h3>
-                    <p className="text-gray-600 line-clamp-3 text-sm sm:text-base">{thread.content}</p>
-                  </Link>
-                );
-              })
-            )}
-          </div>
-        </>
-      )}
-
-      {/* =========================================
-          タブが「プロジェクト」のときの表示
-      ========================================= */}
-      {currentTab === "projects" && (
-        <div className="w-full space-y-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-gray-800">募集中のプロジェクト</h2>
-            <Link href="/project/create" className="bg-black text-white px-5 py-2 rounded-full font-bold text-sm hover:bg-gray-800 transition">
-              ＋ プロジェクトを立ち上げる
+          <h1 className="text-5xl sm:text-6xl md:text-8xl font-black tracking-tighter mb-8 leading-[1.05] text-black">
+            思考が交じり合い、<br />
+            プロダクトが加速する。
+          </h1>
+          
+          <p className="text-base sm:text-lg md:text-xl text-gray-500 mb-14 max-w-3xl mx-auto leading-relaxed font-normal">
+            Gakuruは、個人開発者やソフトウェアエンジニアがシームレスに交差するプラットフォーム。<br className="hidden sm:block" />
+            深い意見交換とプロジェクトの共創を通じて、全員の知識向上とプロダクトの成功を実装します。
+          </p>
+          
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link 
+              href="/home" 
+              className="w-full sm:w-auto bg-black text-white text-sm font-semibold py-4 px-10 rounded-xl hover:bg-gray-800 transition-all duration-300 shadow-lg shadow-black/10 hover:shadow-black/20 hover:-translate-y-0.5"
+            >
+              コミュニティに参加する
+            </Link>
+            <Link 
+              href="/home" 
+              className="w-full sm:w-auto bg-white text-gray-600 text-sm font-semibold py-4 px-10 rounded-xl border border-gray-200 hover:border-gray-400 hover:text-black transition-all duration-300"
+            >
+              ダッシュボードを見る
             </Link>
           </div>
-
-          {projectList.length === 0 ? (
-            <p className="text-gray-500 text-center py-12 bg-white rounded-lg border">まだプロジェクトがありません。最初のプロジェクトを立ち上げましょう！</p>
-          ) : (
-            projectList.map((project) => {
-              const rolesArray = Array.isArray(project.recruitingRoles) ? project.recruitingRoles : [];
-              return (
-                <Link href={`/project/${project.id}`} key={project.id} className="block bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                    <div className="flex items-center gap-3">
-                      {project.ownerAvatar ? <img src={project.ownerAvatar} alt="avatar" className="w-8 h-8 rounded-full" /> : <div className="w-8 h-8 bg-gray-200 rounded-full" />}
-                      <span className="text-sm font-medium text-gray-600">{project.ownerName}</span>
-                    </div>
-                    <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded-full w-fit">
-                      {project.progressStatus}
-                    </span>
-                  </div>
-                  
-                  <h3 className="text-2xl font-bold text-gray-800 mb-2">{project.title}</h3>
-                  <p className="text-gray-600 line-clamp-2 mb-6">{project.description}</p>
-                  
-                  <div className="bg-gray-50 p-4 rounded-lg border flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="text-sm font-bold text-gray-700 whitespace-nowrap">募集ポジション：</div>
-                    <div className="flex flex-wrap gap-2">
-                      {rolesArray.map((role: string, index: number) => (
-                        <span key={index} className="bg-white border border-gray-300 text-gray-700 text-xs font-bold px-3 py-1 rounded-full shadow-sm">
-                          {role}
-                        </span>
-                      ))}
-                      {project.isOpenToAll && (
-                        <span className="bg-yellow-100 border border-yellow-200 text-yellow-800 text-xs font-bold px-3 py-1 rounded-full shadow-sm flex items-center gap-1">
-                          🙌 分野問わず歓迎！
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })
-          )}
         </div>
-      )}
+      </section>
 
-      {/* =========================================
-          🌟 タブが「レビュー募集」のときの表示
-      ========================================= */}
-      {currentTab === "reviews" && (
-        <div className="w-full space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">レビュー募集中のプロダクト</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                みんなのアプリやサイトを触って、フィードバックを送りましょう！
-              </p>
-            </div>
+      {/* --- Bento Grid Features Section --- */}
+      <section className="py-24 bg-gray-50/50 border-t border-gray-100 px-6 relative z-10">
+        <div className="max-w-5xl mx-auto">
+          
+          <div className="mb-20 text-center sm:text-left">
+            <span className="text-xs font-mono font-bold tracking-widest text-gray-400 uppercase block mb-3">Core Functions</span>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-black">
+              知識のアップデートと、実装のサイクル
+            </h2>
+          </div>
+
+          {/* 凝ったレイアウトを表現する非対称グリッド */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             
-            {/* 先ほど作成した投稿画面（/reviews/create）へのリンク */}
-            <Link href="/reviews/create" className="bg-black text-white px-5 py-2 rounded-full font-bold text-sm hover:bg-gray-800 transition whitespace-nowrap text-center">
-              ＋ アプリを投稿する
-            </Link>
-          </div>
-
-          {reviewList.length === 0 ? (
-            <p className="text-gray-500 text-center py-12 bg-white rounded-lg border">まだレビュー募集がありません。あなたのアプリを一番乗りで投稿してみましょう！</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {reviewList.map((req) => (
-                <Link key={req.id} href={`/reviews/${req.id}`} className="bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition flex flex-col h-full group">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-800 group-hover:text-blue-600 transition mb-2 line-clamp-2">
-                      {req.title}
-                    </h3>
-                    <p className="text-sm text-gray-600 line-clamp-3 mb-4">
-                      {req.description}
-                    </p>
-                  </div>
-                  
-                  {req.targetUrl && (
-                    <div className="mb-4 text-[10px] text-blue-500 font-mono bg-blue-50 px-2 py-1 rounded truncate">
-                      🔗 {req.targetUrl}
-                    </div>
-                  )}
-                  
-                  <div className="border-t pt-4 flex items-center justify-between mt-auto">
-                    <div className="flex items-center gap-2">
-                      {req.authorAvatar ? (
-                        <img src={req.authorAvatar} className="w-6 h-6 rounded-full border" alt="avatar" />
-                      ) : (
-                        <div className="w-6 h-6 bg-gray-200 rounded-full border" />
-                      )}
-                      <span className="text-xs font-bold text-gray-700">{req.authorName}</span>
-                    </div>
-                    <span className="text-[10px] text-gray-400">
-                      {new Date(req.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </Link>
-              ))}
+            {/* 大きなカード：意見交換 (2カラム分を使用) */}
+            <div className="md:col-span-2 bg-white border border-gray-100 p-8 md:p-10 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between group">
+              <div>
+                <div className="w-10 h-10 border border-gray-100 rounded-xl flex items-center justify-center bg-gray-50 mb-8 group-hover:scale-105 transition-transform duration-300">
+                  <svg className="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-black mb-3">高次元な意見交換スレッド</h3>
+                <p className="text-gray-500 text-sm leading-relaxed max-w-xl">
+                  アーキテクチャの選定からニッチなエラーの解決まで。様々なスタックを持つエンジニアが交じり合うことで、一人では到達できなかった最適な設計やアプローチがその場で見つかります。
+                </p>
+              </div>
+              <div className="mt-8 pt-6 border-t border-gray-50 text-xs font-mono text-gray-400">
+                // active_discussions_module
+              </div>
             </div>
-          )}
-        </div>
-      )}
 
-    </main>
+            {/* 通常のカード：プロジェクト */}
+            <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between group">
+              <div>
+                <div className="w-10 h-10 border border-gray-100 rounded-xl flex items-center justify-center bg-gray-50 mb-8 group-hover:scale-105 transition-transform duration-300">
+                  <svg className="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-black mb-3">プロジェクト共創</h3>
+                <p className="text-gray-500 text-sm leading-relaxed">
+                  アイデアを形にするための仲間を募集。必要なポジションを明確に提示し、チームビルディングから実際のリリースまでを同じ空間で完結させます。
+                </p>
+              </div>
+              <div className="mt-8 pt-6 border-t border-gray-50 text-xs font-mono text-gray-400">
+                // build_together
+              </div>
+            </div>
+
+            {/* 通常のカード：レビュー */}
+            <div className="bg-white border border-gray-100 p-8 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between group">
+              <div>
+                <div className="w-10 h-10 border border-gray-100 rounded-xl flex items-center justify-center bg-gray-50 mb-8 group-hover:scale-105 transition-transform duration-300">
+                  <svg className="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-black mb-3">プロダクト批評</h3>
+                <p className="text-gray-500 text-sm leading-relaxed">
+                  Webアプリや成果物のURLを共有し、実践的なアドバイスを収集。お互いの「昨日からの進捗（差分）」を評価し合うカルチャーが根底にあります。
+                </p>
+              </div>
+              <div className="mt-8 pt-6 border-t border-gray-50 text-xs font-mono text-gray-400">
+                // peer_review_system
+              </div>
+            </div>
+
+            {/* 大きなカード：目的 (2カラム分を使用) */}
+            <div className="md:col-span-2 bg-gradient-to-br from-gray-900 to-black border border-gray-800 p-8 md:p-10 rounded-2xl shadow-sm text-white flex flex-col justify-between group">
+              <div>
+                <span className="text-[10px] font-mono tracking-widest text-gray-500 uppercase block mb-4">Ultimate Goal</span>
+                <h3 className="text-2xl font-bold text-white mb-4 tracking-tight">
+                  全員の「知識向上」と「プロジェクトの成功」へ
+                </h3>
+                <p className="text-gray-400 text-sm leading-relaxed max-w-xl">
+                  Gakuruの目的は、単にコードを共有することではありません。異なるスキルを持つコアメンバーが交じることで、相互に圧倒的な知識の向上を引き起こし、立ち上がったプロダクトを確実に成功へと導くエコシステムを構築します。
+                </p>
+              </div>
+              <div className="mt-8 pt-4 border-t border-white/10 text-xs font-mono text-gray-500">
+                // mission_accomplished
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* --- CTA Section --- */}
+      <section className="py-32 px-6 text-center relative z-10">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-3xl md:text-5xl font-black tracking-tighter text-black mb-6">
+            そのアイデアに、最高の交差点を。
+          </h2>
+          <p className="text-gray-500 mb-10 text-sm sm:text-base">
+            登録は数秒で完了します。新しい創出のサイクルを、ここから始めましょう。
+          </p>
+          <Link 
+            href="/home" 
+            className="inline-block bg-black text-white text-sm font-semibold py-4 px-12 rounded-xl hover:bg-gray-800 transition-all duration-300 shadow-lg shadow-black/10"
+          >
+            コミュニティのエントランスを開く
+          </Link>
+        </div>
+      </section>
+
+    </div>
   );
 }

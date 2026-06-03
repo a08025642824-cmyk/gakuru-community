@@ -1,7 +1,8 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { db } from "../../db/index";
-import { threads, users } from "../../db/schema";
+// 🌟 1. userStats をスキーマから読み込む
+import { threads, users, userStats } from "../../db/schema";
 import { eq, desc } from "drizzle-orm";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -9,7 +10,7 @@ import { revalidatePath } from "next/cache";
 export default async function MyPage() {
   const { userId } = await auth();
   if (!userId) {
-    redirect("/");
+    redirect("/home");
   }
 
   const clerkUser = await currentUser();
@@ -25,11 +26,21 @@ export default async function MyPage() {
     .limit(1);
 
   const myProfile = userData[0] || {};
-
-  // skillsはJSON（配列）として保存されている想定なので、配列として扱う
   const skillsArray = Array.isArray(myProfile.skills) ? myProfile.skills : [];
 
-  // 2. プロフィールを更新する処理（Server Action）
+  // 🌟 2. データベースから自分のポイント情報を取得
+  const statsData = await db
+    .select({
+      currentPoints: userStats.currentPoints,
+    })
+    .from(userStats)
+    .where(eq(userStats.userId, userId))
+    .limit(1);
+    
+  // まだポイントデータがない場合（初めてのログイン時など）は0ポイントにする
+  const myPoints = statsData[0]?.currentPoints || 0;
+
+  // 3. プロフィールを更新する処理（Server Action）
   async function updateProfile(formData: FormData) {
     "use server";
     const { userId } = await auth();
@@ -38,13 +49,11 @@ export default async function MyPage() {
     const skillsInput = formData.get("skills") as string;
     const bio = formData.get("bio") as string;
 
-    // カンマ区切りの文字列を、空白を消して配列に変換（空文字は除外）
     const newSkills = skillsInput
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s !== "");
 
-    // データベースを更新
     await db.update(users)
       .set({
         skills: newSkills,
@@ -55,7 +64,7 @@ export default async function MyPage() {
     revalidatePath("/mypage");
   }
 
-  // 3. 自分が立てたスレッド一覧を取得
+  // 4. 自分が立てたスレッド一覧を取得
   const myThreads = await db
     .select({
       id: threads.id,
@@ -79,19 +88,28 @@ export default async function MyPage() {
         )}
 
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-800 flex flex-wrap items-center gap-3 mb-2">
-            {clerkUser?.firstName || clerkUser?.lastName || "名無しユーザー"}
-
-            {/* 🌟 配列になったスキルを複数バッジとして表示 */}
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <h1 className="text-2xl font-bold text-gray-800">
+              {clerkUser?.firstName || clerkUser?.lastName || "名無しユーザー"}
+            </h1>
+            
+            {/* 🌟 ポイントバッジを追加 */}
+            <div className="bg-yellow-100 text-yellow-800 border border-yellow-200 text-sm font-bold px-3 py-1 rounded-full shadow-sm flex items-center gap-1">
+              <span>🌟</span> {myPoints} pt
+            </div>
+          </div>
+          
+          {/* 配列になったスキルを複数バッジとして表示 */}
+          <div className="flex flex-wrap items-center gap-2 mt-2">
             {skillsArray.map((skill: string, index: number) => (
               <span key={index} className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">
                 {skill}
               </span>
             ))}
-          </h1>
+          </div>
 
-          <p className="text-gray-600 mt-3 whitespace-pre-wrap leading-relaxed">
-            {myProfile.bio ? myProfile.bio : "自己紹介はまだありません。"}
+          <p className="text-gray-600 mt-4 whitespace-pre-wrap leading-relaxed bg-gray-50 p-4 rounded-lg border">
+            {myProfile.bio ? myProfile.bio : "自己紹介はまだありません。得意な技術や作っているものを書いてみましょう！"}
           </p>
           <p className="text-gray-400 mt-4 text-sm font-medium">作成したスレッド: {myThreads.length}件</p>
         </div>
@@ -103,7 +121,6 @@ export default async function MyPage() {
 
         <form action={updateProfile} className="space-y-4">
           <div>
-            {/* 🌟 ラベルの文字を変更 */}
             <label className="block text-sm font-bold mb-2 text-gray-700">
               活動領域・肩書き（複数ある場合はカンマ「,」で区切る）
             </label>
@@ -111,7 +128,7 @@ export default async function MyPage() {
               type="text"
               name="skills"
               defaultValue={skillsArray.join(", ")}
-              className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:ring-2 focus:ring-black transition"
               placeholder="例：Webエンジニア, 動画編集, マーケティング,アプリエンジニア,AI研修者,デザイナー"
             />
           </div>
@@ -120,14 +137,14 @@ export default async function MyPage() {
             <textarea
               name="bio"
               defaultValue={myProfile.bio || ""}
-              rows={3}
-              className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={4}
+              className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:ring-2 focus:ring-black transition"
               placeholder="興味のある分野や、一緒にやりたいことなどを書いてみましょう！"
             />
           </div>
           <button
             type="submit"
-            className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-6 rounded transition"
+            className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-6 rounded transition shadow-sm"
           >
             保存する
           </button>

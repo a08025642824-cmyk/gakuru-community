@@ -9,7 +9,7 @@ export default async function DMInboxPage() {
   const { userId: myId } = await auth();
   
   if (!myId) {
-    redirect("/");
+    redirect("/home");
   }
 
   // 1. 自分が送った、または受け取った「すべてのメッセージ」を新しい順に取得
@@ -71,7 +71,7 @@ export default async function DMInboxPage() {
             <p className="text-sm text-gray-500 mb-6">
               気になるプロジェクトやスレッドを見つけて、<br />メンバーにダイレクトメッセージを送ってみましょう！
             </p>
-            <Link href="/" className="bg-black text-white px-6 py-3 rounded-full font-bold text-sm hover:bg-gray-800 transition">
+            <Link href="/home" className="bg-black text-white px-6 py-3 rounded-full font-bold text-sm hover:bg-gray-800 transition">
               ホームに戻る
             </Link>
           </div>

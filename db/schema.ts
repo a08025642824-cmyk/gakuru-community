@@ -150,3 +150,24 @@ export const reviewFeedbacks = sqliteTable('review_feedbacks', {
   
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
+
+// db/schema.ts 内に追記
+// ※上部のインポートに sql が無ければ追加してください: import { sql } from "drizzle-orm";
+
+// 🌟 ユーザーの貢献度やポイントを管理するテーブル
+export const userStats = sqliteTable('user_stats', {
+  // usersテーブルのidと紐付け
+  userId: text('user_id').primaryKey().references(() => users.id),
+  
+  // 現在保有しているポイント（将来、投稿時に50pt消費する用）
+  currentPoints: integer('current_points').notNull().default(0),
+  
+  // 累計の貢献スコア（消費されても減らない、ランキングや称号の判定用）
+  totalContributionScore: integer('total_contribution_score').notNull().default(0),
+  
+  // 過去に他人のプロジェクトやレビューにコメントした総数
+  feedbackCount: integer('feedback_count').notNull().default(0),
+  
+  // 更新日時
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});

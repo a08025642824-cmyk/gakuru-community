@@ -9,7 +9,7 @@ import Link from "next/link";
 export default async function ProjectEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
   if (!userId) {
-    redirect("/");
+    redirect("/home");
   }
 
   const resolvedParams = await params;

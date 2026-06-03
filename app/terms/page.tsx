@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function TermsPage() {
   return (
     <main className="max-w-3xl mx-auto p-8 mt-10 mb-20 bg-white rounded-lg shadow-sm border">
-      <Link href="/" className="text-blue-500 hover:underline mb-8 inline-block font-bold text-sm">
+      <Link href="/home" className="text-blue-500 hover:underline mb-8 inline-block font-bold text-sm">
         ← トップに戻る
       </Link>
 

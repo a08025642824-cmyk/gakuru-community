@@ -16,7 +16,7 @@ export default function CreateReviewPage() {
     setError("");
 
     const formData = new FormData(e.currentTarget);
-    
+
     // Server Actionを呼び出してデータベースに保存
     const res = await createReviewRequest(formData);
 
@@ -31,7 +31,8 @@ export default function CreateReviewPage() {
 
   return (
     <main className="max-w-2xl mx-auto p-4 sm:p-8 mt-10 animate-fade-in">
-      <Link href="/reviews" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
+      {/* 🌟 修正： href="/reviews" を href="/home?tab=reviews" に変更 */}
+      <Link href="/home?tab=reviews" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
         ← レビューボードに戻る
       </Link>
 
