@@ -3,13 +3,15 @@ import { redirect } from "next/navigation";
 import { db } from "../../../db/index";
 import { projects, projectMembers } from "../../../db/schema";
 import Link from "next/link";
+// 🌟 追加：ダブルタップ防止用のボタンを読み込む（ルート階層に合わせるため3つ上から参照）
+import SubmitButton from "../../components/SubmitButton";
 
 export default async function CreateProjectPage() {
   const { userId } = await auth();
   
-  // ログインしていない場合はトップページへ
+  // ログインしていない場合はトップページ（LP）へ
   if (!userId) {
-    redirect("/home");
+    redirect("/");
   }
 
   // プロジェクトを保存する処理（Server Action）
@@ -65,11 +67,11 @@ export default async function CreateProjectPage() {
       projectId: projectId,
       userId: userId,
       roleText: "発起人 / オーナー",
-      status: "approved", // 自分で作ったので最初から承認済み
+      status: "approved", 
       createdAt: new Date(),
     });
 
-    // 🌟 一旦トップページに戻す（あとでプロジェクト詳細画面ができたらそっちに飛ばします）
+    // プロジェクト詳細画面へ飛ばす
     redirect(`/project/${projectId}`);
   }
 
@@ -131,7 +133,7 @@ export default async function CreateProjectPage() {
             </div>
           </div>
 
-          {/* ▼ セクション3：ツール連携（あとからでもOK） */}
+          {/* ▼ セクション3：ツール連携 */}
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-gray-800 border-b pb-2">3. 開発ツール連携 (任意)</h2>
             <p className="text-sm text-gray-500 mb-4">すでに用意しているツールがあればURLを貼ってください。参加者のみに表示されます。</p>
@@ -156,7 +158,7 @@ export default async function CreateProjectPage() {
             </div>
           </div>
 
-          {/* ▼ 追加：セクション4：立ち上げ前の確認事項（免責とテンプレート） */}
+          {/* ▼ セクション4：トラブルを防ぐための推奨事項 */}
           <div className="space-y-4 bg-blue-50/50 p-6 rounded-lg border border-blue-100">
             <h2 className="text-lg font-bold text-blue-900 border-b border-blue-200 pb-2 flex items-center gap-2">
               <span>🛡️</span> トラブルを防ぐための推奨事項
@@ -175,9 +177,12 @@ export default async function CreateProjectPage() {
             </p>
           </div>
 
-          <button type="submit" className="w-full bg-black hover:bg-gray-800 text-white font-bold py-4 px-8 rounded-lg text-lg transition shadow-md">
-            🚀 この内容でプロジェクトを立ち上げる
-          </button>
+          {/* 🌟 修正：通常の <button> を消去し、SubmitButton に差し替え */}
+          <SubmitButton 
+            label="🚀 この内容でプロジェクトを立ち上げる"
+            pendingLabel="プロジェクトを立ち上げ中..."
+            className="w-full bg-black hover:bg-gray-800 text-white font-bold py-4 px-8 rounded-lg text-lg transition shadow-md flex items-center justify-center"
+          />
         </form>
       </div>
     </main>

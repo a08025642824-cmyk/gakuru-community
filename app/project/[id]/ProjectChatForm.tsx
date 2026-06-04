@@ -1,51 +1,48 @@
 "use client";
 
 import { useRef, useState } from "react";
+// 🌟 追加：共通の送信ボタンを読み込む（パスは適宜調整してください）
+import SubmitButton from "../../components/SubmitButton";
 
 export default function ChatForm({ sendMessage }: { sendMessage: (formData: FormData) => Promise<void> }) {
   const formRef = useRef<HTMLFormElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null); // inputタグを直接操作するための魔法の杖
-  const [imagePreview, setImagePreview] = useState<string | null>(null); // 🌟 プレビュー用のURLを保存する箱
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  // 🌟 1. 画像が「選択された瞬間」の処理
+  // 1. 画像が「選択された瞬間」の処理（変更なし）
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     
     if (file) {
-      // 1MB制限を「選んだ瞬間」にチェックして即座に弾く！
       if (file.size > 1 * 1024 * 1024) {
         alert("⚠️ 画像のサイズが大きすぎます（上限1MBまで）。\nもう少し容量の小さい画像を選んでください。");
-        removeImage(); // プレビューと選択状態をリセット
+        removeImage();
         return;
       }
-      
-      // 問題なければ、ブラウザ上でだけ見える一時的なプレビューURLを作成
       setImagePreview(URL.createObjectURL(file));
     }
   };
 
-  // 🌟 2. プレビューの「✕ボタン」を押して取り消す処理
+  // 2. プレビューの「✕ボタン」を押して取り消す処理（変更なし）
   const removeImage = () => {
     setImagePreview(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""; // 選んだファイル自体の記憶も消す
+      fileInputRef.current.value = ""; 
     }
   };
 
-  // 3. 送信ボタンが押された時の処理
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); 
-    
-    const formData = new FormData(e.currentTarget);
+  // 🌟 3. 変更：onSubmit ではなく「action属性」に渡す関数に書き換え！
+  // FormData が直接渡ってくるので、e.preventDefault() は不要になります。
+  const clientAction = async (formData: FormData) => {
     const file = formData.get("image") as File;
 
-    // 念のためのサイズチェック（そのまま残します）
+    // 念のためのサイズチェック
     if (file && file.size > 1 * 1024 * 1024) {
       alert("⚠️ 画像のサイズが大きすぎます（上限1MBまで）。");
       return;
     }
 
-    // 親（page.tsx）から渡された送信関数を実行
+    // 親（page.tsx）から渡された送信関数（Server Action）を実行
     await sendMessage(formData);
 
     // 送信が終わったら、フォームの中身もプレビューも全部空っぽにリセット！
@@ -54,10 +51,10 @@ export default function ChatForm({ sendMessage }: { sendMessage: (formData: Form
   };
 
   return (
-    // 縦並び（プレビューが上、入力欄が下）になるように flex-col を追加
-    <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-2">
+    // 🌟 変更：onSubmit={handleSubmit} を action={clientAction} に変更
+    <form ref={formRef} action={clientAction} className="flex flex-col gap-2">
       
-      {/* 🌟 プレビュー表示エリア（画像が選ばれている時だけ出現！） */}
+      {/* プレビュー表示エリア（変更なし） */}
       {imagePreview && (
         <div className="relative inline-block w-max ml-2 mt-2">
           <img 
@@ -85,8 +82,8 @@ export default function ChatForm({ sendMessage }: { sendMessage: (formData: Form
             name="image" 
             accept="image/*" 
             className="hidden" 
-            ref={fileInputRef} // リセットできるように紐付け
-            onChange={handleImageChange} // 🌟 画像が選ばれた瞬間に発動
+            ref={fileInputRef}
+            onChange={handleImageChange}
           />
         </label>
 
@@ -94,15 +91,16 @@ export default function ChatForm({ sendMessage }: { sendMessage: (formData: Form
           name="content"
           rows={2}
           placeholder="メッセージを入力... (画像は1MBまで)"
-          className="flex-1 border border-gray-300 p-3 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+          className="flex-1 border border-gray-300 p-3 text-sm rounded-lg focus:ring-2 focus:ring-black outline-none resize-none transition"
         />
         
-        <button 
-          type="submit" 
-          className="bg-black hover:bg-gray-800 text-white font-bold h-full py-3 px-6 rounded-lg transition"
-        >
-          送信
-        </button>
+        {/* 🌟 変更：通常の button から SubmitButton に差し替え */}
+        {/* UIが崩れないように h-full などを className に引き継いでいます */}
+        <SubmitButton 
+          label="送信" 
+          pendingLabel="送信中" 
+          className="bg-black hover:bg-gray-800 text-white font-bold h-full py-3 px-6 rounded-lg transition whitespace-nowrap"
+        />
       </div>
     </form>
   );

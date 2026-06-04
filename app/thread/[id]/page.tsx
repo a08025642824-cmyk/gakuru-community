@@ -7,7 +7,8 @@ import { eq, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import CriticalButton from "./CriticalButton";
-import DeleteCommentButton from "./DeleteCommentButton"; 
+import DeleteCommentButton from "./DeleteCommentButton";
+import SubmitButton from "../../components/SubmitButton"; 
 
 export default async function ThreadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
@@ -201,9 +202,14 @@ export default async function ThreadDetailPage({ params }: { params: Promise<{ i
             className="w-full border border-gray-300 p-3 rounded focus:outline-none focus:ring-2 focus:ring-black transition"
             placeholder="コメントを書き込む..."
           />
-          <button type="submit" className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-4 rounded transition self-end">
-            送信する
-          </button>
+          
+          {/* 🌟 修正：普通の buttonタグ を消して、SubmitButton に差し替える */}
+          <SubmitButton 
+            label="送信する" 
+            pendingLabel="送信中..." 
+            className="bg-black hover:bg-gray-800 text-white font-bold py-3 px-6 rounded transition self-end"
+          />
+
         </form>
       ) : (
         <p className="text-gray-500 text-center p-4 bg-gray-50 rounded-lg border">
