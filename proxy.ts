@@ -1,21 +1,30 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
-const isPublicRoute = createRouteMatcher(['/', '/about', '/sign-in(.*)', '/sign-up(.*)']);
+// 🌟 変更：ダッシュボードと、各コンテンツの詳細ページを誰でも見れるように開放！
+const isPublicRoute = createRouteMatcher([
+  '/', 
+  '/about', 
+  '/sign-in(.*)', 
+  '/sign-up(.*)',
+  '/home',           // ダッシュボードを開放
+  '/thread(.*)',     // スレッド詳細を開放
+  '/project(.*)',    // プロジェクト詳細を開放
+  '/reviews(.*)'     // レビュー詳細を開放
+]);
 
-// 🌟 1. コールバック関数に async を追加
 export default clerkMiddleware(async (auth, req) => {
-  // 🌟 2. await auth() で非同期にデータを取得する
   const { userId } = await auth();
-  
   const currentUrl = new URL(req.url);
 
+  // ログイン済みのユーザーがLP('/')にアクセスしたら、自動で'/home'に飛ばす（これはそのまま）
   if (userId && currentUrl.pathname === '/') {
     return NextResponse.redirect(new URL('/home', req.url));
   }
 
+  // パブリックルート「以外」のページ（/mypage や /create などの作成画面）に
+  // 未ログインでアクセスしようとしたら、Clerkのログイン画面に弾く
   if (!userId && !isPublicRoute(req)) {
-    // 🌟 3. protect() も非同期になっているため、await をつける
     await auth.protect();
   }
 });
