@@ -51,7 +51,6 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
 
   return (
     <main className="max-w-3xl mx-auto p-4 sm:p-8 mt-4 animate-fade-in">
-      {/* 🌟 修正： /home/tab=reviews を /home?tab=reviews に変更 */}
       <Link href="/home?tab=reviews" className="text-blue-500 hover:underline mb-6 inline-block font-bold">
         ← レビューボードに戻る
       </Link>
@@ -73,11 +72,23 @@ export default async function ReviewDetailPage({ params }: { params: Promise<{ i
 
         <h1 className="text-2xl sm:text-3xl font-black text-gray-800 mb-4">{request.title}</h1>
         
-        {request.targetUrl && (
-          <a href={request.targetUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-600 font-mono text-sm px-4 py-2 rounded-lg transition mb-6 border border-blue-100">
-            <span>🔗</span> {request.targetUrl} <span className="text-[10px]">↗</span>
+        {/* 🌟 追加：𝕏でポストしてレビューを集めるボタン */}
+        <div className="mb-6 flex flex-wrap gap-3 items-center">
+          <a 
+            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`🎯 「${request.title}」のレビューを募集中！\n\n本気のフィードバックをお待ちしています。\nGakuru Communityで一緒に開発を加速させましょう！\n#個人開発 #GakuruCommunity`)}&url=${encodeURIComponent(`https://gakuru-community.vercel.app/reviews/${request.id}`)}`}
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="bg-black hover:bg-gray-800 text-white text-sm font-bold py-2 px-5 rounded-full inline-flex items-center gap-2 transition shadow-sm w-fit"
+          >
+            <span className="text-lg leading-none">𝕏</span> ポストしてレビューを集める
           </a>
-        )}
+
+          {request.targetUrl && (
+            <a href={request.targetUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-600 font-mono text-sm px-4 py-2 rounded-full transition border border-blue-100">
+              <span>🔗</span> アプリを見る <span className="text-[10px]">↗</span>
+            </a>
+          )}
+        </div>
 
         <div className="bg-gray-50 p-4 rounded-lg border">
           <h3 className="text-xs font-bold text-gray-400 mb-2">概要と欲しいフィードバック</h3>

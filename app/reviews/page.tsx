@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { db } from "../../db/index";
-import { reviewRequests, users, reviewFeedbacks } from "../../db/schema";
+import { reviewRequests, users } from "../../db/schema";
 import { eq, desc } from "drizzle-orm";
 import Link from "next/link";
 
@@ -34,10 +34,24 @@ export default async function ReviewBoardPage() {
           </p>
         </div>
         
-        {/* 新規投稿画面へのリンク */}
-        <Link href="/reviews/create" className="bg-black hover:bg-gray-800 text-white font-bold py-2 px-6 rounded-lg text-sm transition text-center shadow-sm whitespace-nowrap">
-          ＋ アプリを投稿する
-        </Link>
+        {/* 🌟 修正：ボタンを横並びにするラッパーを追加 */}
+        <div className="flex items-center gap-3">
+          
+          {/* 🌟 追加：掲示板全体を𝕏でシェアするボタン */}
+          <a 
+            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`🎯 Gakuru Communityで開発中のアプリのレビューを募集・評価し合いませんか？\n熱量の高いエンジニアのフィードバックをお待ちしています！\n#個人開発 #GakuruCommunity`)}&url=${encodeURIComponent(`https://gakuru-community.vercel.app/home?tab=reviews`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm transition text-center shadow-sm whitespace-nowrap flex items-center gap-2"
+          >
+            <span className="text-lg leading-none">𝕏</span> シェア
+          </a>
+
+          {/* 新規投稿画面へのリンク */}
+          <Link href="/reviews/create" className="bg-black hover:bg-gray-800 text-white font-bold py-2 px-6 rounded-lg text-sm transition text-center shadow-sm whitespace-nowrap">
+            ＋ アプリを投稿する
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
